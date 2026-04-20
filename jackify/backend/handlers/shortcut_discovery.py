@@ -165,7 +165,7 @@ class ShortcutDiscoveryMixin:
                             self.logger.info(f"Found AppID {appid} for shortcut '{name}' (no exe validation)")
                             return str(int(appid) & 0xFFFFFFFF)
 
-            self.logger.warning(f"No matching shortcut found in shortcuts.vdf for '{shortcut_name}'")
+            self.logger.debug(f"No matching shortcut found in shortcuts.vdf for '{shortcut_name}'")
             return None
 
         except Exception as e:

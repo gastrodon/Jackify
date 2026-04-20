@@ -1,5 +1,35 @@
 # Jackify Changelog
 
+## v0.6 - Game Support Expansion, Modding Tool Support, Post-Install Quality
+**Release Date:** 20/04/26
+
+### New Game Support
+- Additional Game Support - Post-Install automation for BG3, Skyrim VR, and Fallout 4 VR.
+- Skyrim VR / Fallout 4 VR: if your modlist needs additional steps you know of, that Jackify does not yet handle, please open an issue on GitHub with your modlist name and the additional steps required. I cannot testing FO4VR directly as I dont own the game.
+
+### Modding Tool Support
+- Initial compatibility settings for xEdit, Synthesis, and Pandora are applied automatically during install and configure. Re-apply any time via "Configure Tool Compatibility" in Additional Tasks.
+
+### Steam Shortcut Graphics
+- Steam grid artwork now automatically applied to each shortcut, populating all five slots correctly (portrait, landscape, hero, logo, tenfoot).
+
+### First-Launch Reliability
+- First Launch Fixes - Skyrim SE modlists should now launch cleanly first time. No more first-launch crash, incorrect AE/CC popup display, initial NXM prompt in MO2, character creation issues, and wrong initial save location.
+
+### Fixes
+- Configuration no longer wipes game install paths. Registry writes are now targeted rather than full-prefix replacements.
+- Fixed crashes on shutdown caused by force-killing background threads.
+
+### Logging
+- Console output reduced to errors only. All informational output goes to the log file and Show Details panel.
+
+### Engine (0.5.4)
+- Fixed Nexus sessions silently expiring after installs longer than ~1 hour. The engine now persists refreshed OAuth tokens so you stay logged in across long installs.
+- Fixed large downloads hanging indefinitely if a Nexus CDN connection stalled mid-transfer. Downloads now recover automatically and resume from where they left off.
+- Removed the disk space pre-flight check, which was incorrectly blocking installs for users with sufficient space. Out-of-disk conditions are still caught and reported if they actually occur.
+
+---
+
 ## v0.5.0.4 - Hotfix
 **Release Date:** 29/03/26
 

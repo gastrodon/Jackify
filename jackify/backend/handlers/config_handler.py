@@ -70,7 +70,7 @@ class ConfigHandler(ConfigEncryptionMixin, ConfigDirectoriesMixin, ConfigProtonM
             "manual_download_concurrent_limit": 2,  # Shared GUI/CLI default for manual download browser tabs
             "manual_download_watch_directory": None,  # Optional override for manual-download watcher folder
             "window_width": None,  # Saved window width (None = use dynamic sizing)
-            "window_height": None  # Saved window height (None = use dynamic sizing)
+            "window_height": None,  # Saved window height (None = use dynamic sizing)
         }
         
         # Load configuration if exists

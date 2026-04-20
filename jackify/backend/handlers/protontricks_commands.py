@@ -87,7 +87,7 @@ class ProtontricksCommandsMixin:
                 env['WINETRICKS'] = str(winetricks_path)
                 self.logger.debug(f"Set WINETRICKS for native protontricks: {winetricks_path}")
             else:
-                self.logger.warning("Bundled winetricks not found - native protontricks will use system winetricks")
+                self.logger.info("Bundled winetricks not found - native protontricks will use system winetricks")
             cabextract_path = self._get_bundled_cabextract_path()
             if cabextract_path:
                 cabextract_dir = str(cabextract_path.parent)
@@ -95,7 +95,7 @@ class ProtontricksCommandsMixin:
                 env['PATH'] = f"{cabextract_dir}{os.pathsep}{current_path}" if current_path else cabextract_dir
                 self.logger.debug(f"Added bundled cabextract to PATH for native protontricks: {cabextract_dir}")
             else:
-                self.logger.warning("Bundled cabextract not found - native protontricks will use system cabextract")
+                self.logger.info("Bundled cabextract not found - native protontricks will use system cabextract")
         else:
             self.logger.debug(f"Using {self.which_protontricks} protontricks - it has its own winetricks (cannot access AppImage mounts)")
 

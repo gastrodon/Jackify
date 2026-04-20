@@ -253,12 +253,13 @@ class ModlistDetectionMixin:
         modlist_path = Path(self.modlist_dir)
         common_names = [
             "Stock Game",
-            "Game Root",
+            "StockGame",
             "STOCK GAME",
             "Stock Game Folder",
             "Stock Folder",
             "Skyrim Stock",
-            Path("root/Skyrim Special Edition")
+            Path("root/Skyrim Special Edition"),
+            "Game Root",
         ]
 
         found_path = None
@@ -326,6 +327,15 @@ class ModlistDetectionMixin:
             if mo2_ini.exists():
                 try:
                     content = mo2_ini.read_text(errors='ignore').lower()
+                    # Extract gameName= for authoritative game type checks.
+                    # Full-content scans can false-positive on plugin setting keys
+                    # (e.g. enable_skyrimVR=false in a Skyrim SE ini).
+                    game_name_value = ""
+                    for _line in content.splitlines():
+                        stripped_line = _line.strip()
+                        if stripped_line.startswith("gamename="):
+                            game_name_value = stripped_line[len("gamename="):]
+                            break
                     if 'nvse' in content or 'nvse_loader' in content or 'fallout new vegas' in content or 'falloutnv' in content:
                         self.logger.info("Detected FNV via ModOrganizer.ini markers")
                         return "fnv"
@@ -335,6 +345,18 @@ class ModlistDetectionMixin:
                     if any(pattern in content for pattern in ['enderal launcher', 'enderal.exe', 'enderal launcher.exe', 'enderalsteam']):
                         self.logger.info("Detected Enderal via ModOrganizer.ini markers")
                         return "enderal"
+                    if 'cyberpunk 2077' in content or 'cyberpunk2077' in content or 'cp2077' in content:
+                        self.logger.info("Detected Cyberpunk 2077 via ModOrganizer.ini markers")
+                        return "cp2077"
+                    if "baldur's gate 3" in content or 'baldursgate3' in content or 'bg3' in content:
+                        self.logger.info("Detected Baldur's Gate 3 via ModOrganizer.ini markers")
+                        return "bg3"
+                    if 'skyrim vr' in game_name_value or 'skyrimvr' in game_name_value:
+                        self.logger.info("Detected SkyrimVR via ModOrganizer.ini gameName")
+                        return "skyrimvr"
+                    if 'fallout 4 vr' in game_name_value or 'fallout4vr' in game_name_value:
+                        self.logger.info("Detected Fallout 4 VR via ModOrganizer.ini gameName")
+                        return "fallout4vr"
                 except Exception as e:
                     self.logger.debug(f"Failed reading ModOrganizer.ini for detection: {e}")
         except Exception:
@@ -364,6 +386,15 @@ class ModlistDetectionMixin:
             if enderal_launcher.exists():
                 self.logger.info(f"Detected Enderal modlist: found Enderal Launcher.exe in '{base}'")
                 return "enderal"
+            cp2077_exe = base / "Cyberpunk2077.exe"
+            if cp2077_exe.exists():
+                self.logger.info(f"Detected Cyberpunk 2077 modlist: found Cyberpunk2077.exe in '{base}'")
+                return "cp2077"
+            bg3_exe = base / "bg3.exe"
+            bg3_dx11_exe = base / "bg3_dx11.exe"
+            if bg3_exe.exists() or bg3_dx11_exe.exists():
+                self.logger.info(f"Detected BG3 modlist: found BG3 executable in '{base}'")
+                return "bg3"
 
         # Final heuristic using game_var
         try:
@@ -379,6 +410,18 @@ class ModlistDetectionMixin:
                 if 'enderal' in gt:
                     self.logger.info("Heuristic detection: game_var indicates Enderal")
                     return "enderal"
+                if 'cyberpunk' in gt or 'cp2077' in gt:
+                    self.logger.info("Heuristic detection: game_var indicates Cyberpunk 2077")
+                    return "cp2077"
+                if "baldur" in gt or 'bg3' in gt:
+                    self.logger.info("Heuristic detection: game_var indicates BG3")
+                    return "bg3"
+                if 'skyrim vr' in gt or 'skyrimvr' in gt:
+                    self.logger.info("Heuristic detection: game_var indicates SkyrimVR")
+                    return "skyrimvr"
+                if 'fallout 4 vr' in gt or 'fallout4vr' in gt:
+                    self.logger.info("Heuristic detection: game_var indicates Fallout 4 VR")
+                    return "fallout4vr"
         except Exception:
             pass
 

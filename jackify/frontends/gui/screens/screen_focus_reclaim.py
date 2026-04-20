@@ -16,7 +16,7 @@ class FocusReclaimMixin:
     """
 
     def _stop_focus_reclaim(self):
-        pass  # No timer to stop — single-shot, no state
+        pass  # No timer to stop - single-shot, no state
 
     def _start_focus_reclaim_retries(self):
         QTimer.singleShot(500, self._focus_reclaim_tick)

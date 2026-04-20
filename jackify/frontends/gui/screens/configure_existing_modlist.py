@@ -33,8 +33,10 @@ from .configure_existing_modlist_console import ConfigureExistingModlistConsoleM
 from .screen_back_mixin import ScreenBackMixin
 from .install_modlist_ttw import TTWIntegrationMixin
 from .install_modlist_postinstall import PostInstallFeedbackMixin
+from jackify.frontends.gui.mixins.thread_lifecycle_mixin import ThreadLifecycleMixin
 
 class ConfigureExistingModlistScreen(
+    ThreadLifecycleMixin,
     ScreenBackMixin,
     TTWIntegrationMixin,
     ConfigureExistingModlistUIMixin,
@@ -46,38 +48,25 @@ class ConfigureExistingModlistScreen(
 ):
     resize_request = Signal(str)
 
-    def _park_thread(self, thread, signal_names=None):
-        """Disconnect a running thread from this screen and keep it alive until it finishes."""
-        if thread is None:
-            return None
-        signal_names = signal_names or []
-        for signal_name in signal_names:
+    def hideEvent(self, event):
+        if getattr(self, '_vnv_controller', None) is not None:
             try:
-                getattr(thread, signal_name).disconnect()
+                self._vnv_controller.cleanup()
             except Exception:
                 pass
-        if not hasattr(self, "_parked_threads"):
-            self._parked_threads = []
-        self._parked_threads.append(thread)
-        self._parked_threads = [t for t in self._parked_threads if getattr(t, "isRunning", lambda: False)()]
-        return None
+        super().hideEvent(event)
 
     def cleanup_processes(self):
         """Clean up any running processes when the window closes or is cancelled"""
-        if hasattr(self, 'file_progress_list'):
-            self.file_progress_list.stop_cpu_tracking()
-
-        from PySide6.QtCore import QThread
-        for attr_name, value in list(vars(self).items()):
+        if getattr(self, '_vnv_controller', None) is not None:
             try:
-                if isinstance(value, QThread) and value.isRunning():
-                    signal_names = []
-                    for candidate in ("finished_signal", "progress_update", "configuration_complete", "error_occurred"):
-                        if hasattr(value, candidate):
-                            signal_names.append(candidate)
-                    setattr(self, attr_name, self._park_thread(value, signal_names))
+                self._vnv_controller.cleanup()
+                self._vnv_controller = None
             except Exception:
                 pass
+        if hasattr(self, 'file_progress_list'):
+            self.file_progress_list.stop_cpu_tracking()
+        self._park_all_threads()
 
     def cancel_and_cleanup(self):
         """Handle Cancel button - clean up processes and go back"""
@@ -124,6 +113,14 @@ class ConfigureExistingModlistScreen(
 
             if install_dir:
                 game_type = self._detect_game_type_from_mo2_ini(install_dir)
+                appid = getattr(self, '_current_appid', '')
+                if appid:
+                    try:
+                        from jackify.backend.handlers.modlist_handler import ModlistHandler
+                        ModlistHandler().set_steam_grid_images(str(appid), install_dir, game_type=game_type)
+                        logger.debug("Applied Steam artwork for appid %s", appid)
+                    except Exception as e:
+                        logger.warning("Failed to apply Steam artwork: %s", e)
                 if game_type in ('falloutnv', 'fallout_new_vegas'):
                     from jackify.backend.utils.modlist_meta import get_modlist_name
                     identified_name = get_modlist_name(install_dir)

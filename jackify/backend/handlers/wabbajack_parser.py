@@ -26,18 +26,21 @@ class WabbajackParser:
             'Fallout4': 'fallout4',
             'FalloutNewVegas': 'falloutnv',
             'Oblivion': 'oblivion',
-            'Skyrim': 'skyrim',  # Legacy Skyrim
-            'Fallout3': 'fallout3',  # For completeness
-            'SkyrimVR': 'skyrim',  # Treat as Skyrim
-            'Fallout4VR': 'fallout4',  # Treat as Fallout 4
-            'Enderal': 'enderal',  # Enderal: Forgotten Stories
-            'EnderalSpecialEdition': 'enderal',  # Enderal SE
+            'Skyrim': 'skyrim',
+            'Fallout3': 'fallout3',
+            'SkyrimVR': 'skyrimvr',
+            'Fallout4VR': 'fallout4vr',
+            'Enderal': 'enderal',
+            'EnderalSpecialEdition': 'enderal',
+            'Cyberpunk2077': 'cp2077',
+            'BaldursGate3': 'bg3',
         }
-        
+
         # List of supported games in Jackify
         self.supported_games = [
             'skyrim', 'fallout4', 'falloutnv', 'fallout3', 'oblivion',
-            'starfield', 'oblivion_remastered', 'enderal'
+            'starfield', 'oblivion_remastered', 'enderal',
+            'skyrimvr', 'fallout4vr', 'bg3',
         ]
     
     def parse_wabbajack_game_type(self, wabbajack_path: Path) -> Optional[tuple]:
@@ -98,6 +101,23 @@ class WabbajackParser:
             self.logger.error(f"Error parsing .wabbajack file {wabbajack_path}: {e}")
             return None
     
+    def parse_wabbajack_readme(self, wabbajack_path: Path) -> Optional[str]:
+        """
+        Extract the readme URL from a .wabbajack file.
+
+        Returns the URL string, or None if not present or unreadable.
+        """
+        try:
+            with zipfile.ZipFile(wabbajack_path, 'r') as zip_file:
+                modlist_files = [f for f in zip_file.namelist() if f in ['modlist', 'modlist.json']]
+                if not modlist_files:
+                    return None
+                with zip_file.open(modlist_files[0]) as f:
+                    data = json.load(f)
+            return data.get('Readme') or None
+        except Exception:
+            return None
+
     def is_supported_game(self, game_type: str) -> bool:
         """
         Check if a game type is supported by Jackify's post-install configuration.
@@ -128,12 +148,16 @@ class WabbajackParser:
         """
         display_names = {
             'skyrim': 'Skyrim Special Edition',
-            'fallout4': 'Fallout 4', 
+            'fallout4': 'Fallout 4',
             'falloutnv': 'Fallout New Vegas',
             'oblivion': 'Oblivion',
             'starfield': 'Starfield',
             'oblivion_remastered': 'Oblivion Remastered',
-            'enderal': 'Enderal'
+            'enderal': 'Enderal',
+            'skyrimvr': 'Skyrim VR',
+            'fallout4vr': 'Fallout 4 VR',
+            'cp2077': 'Cyberpunk 2077',
+            'bg3': "Baldur's Gate 3",
         }
         return [display_names.get(game, game) for game in self.supported_games]
 

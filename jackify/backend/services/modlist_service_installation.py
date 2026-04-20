@@ -150,16 +150,17 @@ class ModlistServiceInstallationMixin:
             elif context.get('machineid'):
                 cmd += ['-m', context['machineid']]
             cmd += ['-o', install_dir_str, '-d', download_dir_str]
-            if context.get('skip_disk_check'):
-                cmd.append('--skip-disk-check')
 
+            writeback_path = str(auth_service.get_token_writeback_path())
             original_env_values = {
                 'NEXUS_API_KEY': os.environ.get('NEXUS_API_KEY'),
                 'NEXUS_OAUTH_INFO': os.environ.get('NEXUS_OAUTH_INFO'),
+                'JACKIFY_TOKEN_WRITEBACK': os.environ.get('JACKIFY_TOKEN_WRITEBACK'),
                 'DOTNET_SYSTEM_GLOBALIZATION_INVARIANT': os.environ.get('DOTNET_SYSTEM_GLOBALIZATION_INVARIANT')
             }
 
             try:
+                os.environ['JACKIFY_TOKEN_WRITEBACK'] = writeback_path
                 if oauth_info:
                     os.environ['NEXUS_OAUTH_INFO'] = oauth_info
                     from jackify.backend.services.nexus_oauth_service import NexusOAuthService
@@ -285,6 +286,7 @@ class ModlistServiceInstallationMixin:
                         _ck_missing = True
 
                 proc.wait()
+                auth_service.apply_token_writeback(writeback_path)
                 if proc.returncode != 0:
                     if output_callback:
                         output_callback(f"Jackify Install Engine exited with code {proc.returncode}.")

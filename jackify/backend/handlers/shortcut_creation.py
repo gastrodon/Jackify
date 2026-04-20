@@ -104,12 +104,16 @@ class ShortcutCreationMixin:
             except Exception as e:
                 self.logger.error(f"Error determining STEAM_COMPAT_MOUNTS: {e}", exc_info=True)
 
+            dotnet_vars = 'DOTNET_ROOT="" DOTNET_MULTILEVEL_LOOKUP=0'
+
             final_launch_options = launch_options
-            if compat_mounts_str:
-                 if final_launch_options:
-                     final_launch_options = f"{compat_mounts_str} {final_launch_options}"
-                 else:
-                     final_launch_options = compat_mounts_str
+            env_prefix_parts = [p for p in [compat_mounts_str, dotnet_vars] if p]
+            if env_prefix_parts:
+                prefix = " ".join(env_prefix_parts)
+                if final_launch_options:
+                    final_launch_options = f"{prefix} {final_launch_options}"
+                else:
+                    final_launch_options = prefix
 
             if not final_launch_options.strip().endswith("%command%"):
                 if final_launch_options:
@@ -138,7 +142,6 @@ class ShortcutCreationMixin:
 
         except Exception as e:
             self.logger.error(f"Error creating shortcut: {e}", exc_info=True)
-            print(f"An error occurred while creating the shortcut: {e}")
             return False, None
 
     def _is_steam_deck(self):

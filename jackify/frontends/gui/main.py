@@ -218,7 +218,8 @@ def main():
     import signal
     # Enable faulthandler to both stderr and file
     try:
-        log_dir = Path.home() / '.local' / 'share' / 'jackify' / 'logs'
+        from jackify.shared.paths import get_jackify_logs_dir
+        log_dir = get_jackify_logs_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
         trace_file = open(log_dir / 'segfault_trace.txt', 'w')
         faulthandler.enable(file=trace_file, all_threads=True)
@@ -248,28 +249,30 @@ def main():
         config_handler.set('debug_mode', True)
     import logging
 
-    # Initialize file logging on root logger so all modules inherit it
+    # Initialize root logger: jackify.log (INFO, always) + jackify-debug.log (DEBUG, debug mode only)
     from jackify.shared.logging import LoggingHandler
-    logging_handler = LoggingHandler()
-    # Only rotate log file when debug mode is enabled
+    root_logger = LoggingHandler().setup_application_logging(debug_mode)
+
+    def _unhandled_exception(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        logging.getLogger().critical("Unhandled exception", exc_info=(exc_type, exc_value, exc_tb))
+
+    sys.excepthook = _unhandled_exception
+
+    _mode = 'AppImage' if os.environ.get('APPIMAGE') else 'dev'
+    root_logger.info("Jackify %s starting (GUI, %s)", jackify_version, _mode)
     if debug_mode:
-        logging_handler.rotate_log_for_logger('jackify_gui', 'jackify-debug.log')
-    root_logger = logging_handler.setup_logger('', 'jackify-debug.log', is_general=True, debug_mode=debug_mode)  # Empty name = root logger
-    
-    # CRITICAL: Set root logger level BEFORE any child loggers are used
-    # DEBUG messages from child loggers must propagate
-    if debug_mode:
-        root_logger.setLevel(logging.DEBUG)
-        logging.getLogger().setLevel(logging.DEBUG)  # Also set on root via getLogger() for compatibility
-        root_logger.debug("CLI --debug flag detected, saved debug_mode=True to config")
-        root_logger.info("Debug mode enabled (from config or CLI)")
-    else:
-        root_logger.setLevel(logging.WARNING)
-        logging.getLogger().setLevel(logging.WARNING)
-    
-    # Root logger should not propagate (it's the top level)
-    # Child loggers will propagate to root logger by default (unless they explicitly set propagate=False)
-    root_logger.propagate = False
+        root_logger.debug("Debug mode enabled")
+
+    try:
+        from jackify.shared.paths import get_jackify_logs_dir
+        _flatpak = (Path.home() / ".var/app/com.valvesoftware.Steam").exists()
+        _steam_type = 'Flatpak' if _flatpak else 'native'
+        root_logger.info("Steam: %s | log dir: %s", _steam_type, get_jackify_logs_dir())
+    except Exception:
+        pass
 
     dev_mode = '--dev' in sys.argv
 
@@ -292,7 +295,7 @@ def main():
     # Set up signal handlers for graceful shutdown
     import signal
     def signal_handler(sig, frame):
-        print(f"Received signal {sig}, cleaning up...")
+        logging.getLogger().info("Received signal %s, cleaning up...", sig)
         emergency_cleanup()
         app.quit()
     

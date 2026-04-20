@@ -92,9 +92,10 @@ class SettingsDialog(SettingsDialogTabsMixin, SettingsDialogProtonMixin, QDialog
             self.api_show_btn.setStyleSheet("")
 
     def _pick_directory(self, line_edit):
-        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory", line_edit.text() or os.path.expanduser("~"))
+        from jackify.frontends.gui.utils import browse_directory
+        dir_path = browse_directory(self, "Select Directory", line_edit.text())
         if dir_path:
-            line_edit.setText(os.path.realpath(dir_path))
+            line_edit.setText(dir_path)
 
     def _show_help(self):
         MessageService.information(self, "Help", "Help/documentation coming soon!", safety_level="low")
@@ -124,6 +125,7 @@ class SettingsDialog(SettingsDialogTabsMixin, SettingsDialogProtonMixin, QDialog
     def _on_api_key_changed(self, text):
         api_key = text.strip()
         self.config_handler.save_api_key(api_key)
+
 
     def _update_oauth_status(self):
         from jackify.backend.services.nexus_auth_service import NexusAuthService
@@ -308,6 +310,10 @@ class SettingsDialog(SettingsDialogTabsMixin, SettingsDialogProtonMixin, QDialog
 
             self.config_handler.set("game_proton_path", resolved_game_path)
             self.config_handler.set("game_proton_version", resolved_game_version)
+
+            # Save auto tool compat preference
+            self.config_handler.set('auto_tool_compat', self.auto_tool_compat_checkbox.isChecked())
+            self.config_handler.set('force_github_updates', self.force_github_updates_checkbox.isChecked())
 
             # Save component installation method preference
             if self.winetricks_radio.isChecked():

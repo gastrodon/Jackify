@@ -74,18 +74,17 @@ def cleanup_stale_tmp() -> None:
     The engine writes TTW working files (xd3 patches, patch manifests) into
     UUID-named subdirectories under <data_dir>/.tmp/ during TTW installation.
     These are never cleaned up on failure or interruption and can accumulate
-    several GB per run. Any such directory present at startup is always stale —
+    several GB per run. Any such directory present at startup is always stale -
     no TTW install can be in flight before the application has started.
 
-    Only removes directories matching known engine temp prefixes. The
-    jackify-proton-extraction prefix is intentionally reused by the engine
-    across runs and is left in place.
+    jackify-proton-extraction is also cleaned up - the engine no longer uses it
+    and it can accumulate ~700MB.
     """
     tmp_dir = get_jackify_data_dir() / ".tmp"
     if not tmp_dir.is_dir():
         return
 
-    stale_prefixes = ("ttw_mpi_", "ttw_ogg_")
+    stale_prefixes = ("ttw_mpi_", "ttw_ogg_", "jackify-proton-extraction")
     removed = 0
     freed = 0
 

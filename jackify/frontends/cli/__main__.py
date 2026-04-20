@@ -11,12 +11,21 @@ import signal
 import logging
 
 from .main import JackifyCLI
+from jackify.shared.logging import LoggingHandler
+from jackify import __version__ as jackify_version
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+def _setup_cli_logging() -> logging.Logger:
+    debug_mode = '--debug' in sys.argv or '-d' in sys.argv
+    if not debug_mode:
+        try:
+            from jackify.backend.handlers.config_handler import ConfigHandler
+            debug_mode = ConfigHandler().get('debug_mode', False)
+        except Exception:
+            pass
+    return LoggingHandler().setup_application_logging(debug_mode)
+
+root_logger = _setup_cli_logging()
+root_logger.info("Jackify %s starting (CLI)", jackify_version)
 
 def terminate_children(signum, frame):
     """Signal handler to terminate child processes on exit"""

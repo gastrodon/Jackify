@@ -1,10 +1,11 @@
 """
 GUI Utilities for Jackify Frontend
 """
+import os
 import re
-from typing import Tuple, Optional
-from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtCore import QSize, QPoint
+from typing import Tuple, Optional, List
+from PySide6.QtWidgets import QApplication, QWidget, QFileDialog
+from PySide6.QtCore import QSize, QPoint, QUrl
 
 ANSI_COLOR_MAP = {
     '30': 'black', '31': 'red', '32': 'green', '33': 'yellow', '34': 'blue', '35': 'magenta', '36': 'cyan', '37': 'white',
@@ -317,8 +318,53 @@ def apply_window_size_and_position(
         width, height = calculate_window_size(
             window, width_ratio, height_ratio, min_width, min_height, max_width, max_height
         )
-    
+
     # Calculate and set position
     pos = calculate_window_position(window, width, height, parent)
     window.resize(width, height)
     window.move(pos)
+
+
+def _get_sidebar_urls() -> List[QUrl]:
+    """Return QUrl list for home dir plus any mounted volumes under /run/media/."""
+    urls = [QUrl.fromLocalFile(os.path.expanduser("~"))]
+    run_media = "/run/media"
+    if os.path.isdir(run_media):
+        try:
+            for entry in os.scandir(run_media):
+                if entry.is_dir():
+                    # /run/media/<user>/<volume> - add the user subdir and all volumes
+                    try:
+                        for vol in os.scandir(entry.path):
+                            if vol.is_dir():
+                                urls.append(QUrl.fromLocalFile(vol.path))
+                    except PermissionError:
+                        urls.append(QUrl.fromLocalFile(entry.path))
+        except PermissionError:
+            pass
+    return urls
+
+
+def browse_directory(parent: QWidget, title: str, start_path: str = "") -> str:
+    """Open a directory browser dialog with SD card sidebar entries on Steam Deck."""
+    dialog = QFileDialog(parent, title, start_path or os.path.expanduser("~"))
+    dialog.setFileMode(QFileDialog.Directory)
+    dialog.setOption(QFileDialog.ShowDirsOnly, True)
+    dialog.setSidebarUrls(_get_sidebar_urls())
+    if dialog.exec():
+        selected = dialog.selectedFiles()
+        return os.path.realpath(selected[0]) if selected else ""
+    return ""
+
+
+def browse_file(parent: QWidget, title: str, start_path: str = "", file_filter: str = "") -> str:
+    """Open a file browser dialog with SD card sidebar entries on Steam Deck."""
+    dialog = QFileDialog(parent, title, start_path or os.path.expanduser("~"))
+    dialog.setFileMode(QFileDialog.ExistingFile)
+    if file_filter:
+        dialog.setNameFilter(file_filter)
+    dialog.setSidebarUrls(_get_sidebar_urls())
+    if dialog.exec():
+        selected = dialog.selectedFiles()
+        return os.path.realpath(selected[0]) if selected else ""
+    return ""

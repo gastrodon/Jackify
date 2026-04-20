@@ -77,6 +77,7 @@ class ConfigurationPhaseMixin(FocusReclaimMixin, InstallModlistShortcutDialogMix
     def on_configuration_complete(self, success, message, modlist_name, enb_detected=False):
         """Handle configuration completion on main thread"""
         try:
+            install_dir = self.install_dir_edit.text().strip()
             # Stop CPU tracking now that everything is complete
             self.file_progress_list.stop_cpu_tracking()
             # Re-enable controls now that installation/configuration is complete
@@ -107,7 +108,6 @@ class ConfigurationPhaseMixin(FocusReclaimMixin, InstallModlistShortcutDialogMix
                 game_name = display_names.get(self._current_game_type, self._current_game_name)
 
                 # Check for TTW eligibility before showing final success dialog
-                install_dir = self.install_dir_edit.text().strip()
                 ttw_modlist_name = modlist_name
                 try:
                     from jackify.backend.utils.modlist_meta import get_modlist_name
@@ -470,7 +470,7 @@ class ConfigurationPhaseMixin(FocusReclaimMixin, InstallModlistShortcutDialogMix
                         modlist_context = ModlistContext(
                             name=self.context['name'],
                             install_dir=Path(self.context['path']),
-                            download_dir=Path(self.context['path']).parent / 'Downloads',  # Default
+                            download_dir=None,
                             game_type=detected_game_type,
                             nexus_api_key='',  # Not needed for configuration
                             modlist_value=self.context.get('modlist_value'),
@@ -603,7 +603,7 @@ class ConfigurationPhaseMixin(FocusReclaimMixin, InstallModlistShortcutDialogMix
                     modlist_context = ModlistContext(
                         name=self.context['name'],
                         install_dir=Path(self.context['path']),
-                        download_dir=Path(self.context['path']).parent / 'Downloads',  # Default
+                        download_dir=None,
                         game_type=detected_game_type,
                         nexus_api_key='',  # Not needed for configuration
                         modlist_value=self.context.get('modlist_value', ''),

@@ -74,7 +74,7 @@ class ProtontricksPrefixMixin:
                             self.logger.debug("ShowDotFiles already present in correct format in user.reg")
                             dotfiles_set_success = True
                     else:
-                        self.logger.warning(f"user.reg not found at {user_reg_path}, creating it.")
+                        self.logger.info(f"user.reg not found at {user_reg_path}, creating it.")
                         with open(user_reg_path, 'w', encoding='utf-8') as f:
                             f.write('[Software\\\\Wine] 1603891765\n')
                             f.write('"ShowDotFiles"="Y"\n')
@@ -157,6 +157,10 @@ class ProtontricksPrefixMixin:
         self.logger.info("=" * 80)
         env = self._get_clean_subprocess_env()
         env["WINEDEBUG"] = "-all"
+        # Preserve the desktop display variables for Step 4. The validated fix
+        # for the blank taskbar popup regression was keeping DISPLAY available.
+        # Do not strip extra desktop activation vars here without a reproduced,
+        # evidence-backed need.
 
         if self.which_protontricks == 'native':
             winetricks_path = self._get_bundled_winetricks_path()
@@ -164,7 +168,7 @@ class ProtontricksPrefixMixin:
                 env['WINETRICKS'] = str(winetricks_path)
                 self.logger.debug(f"Set WINETRICKS for native protontricks: {winetricks_path}")
             else:
-                self.logger.warning("Bundled winetricks not found - native protontricks will use system winetricks")
+                self.logger.info("Bundled winetricks not found - native protontricks will use system winetricks")
             cabextract_path = self._get_bundled_cabextract_path()
             if cabextract_path:
                 cabextract_dir = str(cabextract_path.parent)
@@ -172,7 +176,7 @@ class ProtontricksPrefixMixin:
                 env['PATH'] = f"{cabextract_dir}{os.pathsep}{current_path}" if current_path else cabextract_dir
                 self.logger.debug(f"Added bundled cabextract to PATH for native protontricks: {cabextract_dir}")
             else:
-                self.logger.warning("Bundled cabextract not found - native protontricks will use system cabextract")
+                self.logger.info("Bundled cabextract not found - native protontricks will use system cabextract")
         else:
             self.logger.info(f"Using {self.which_protontricks} protontricks - it has its own winetricks (cannot access AppImage mounts)")
 

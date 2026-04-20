@@ -64,7 +64,7 @@ class FilesystemSteamMixin:
 
         default_path = Path.home() / ".steam/steam/steamapps/common"
         if default_path.is_dir():
-            logger.warning(f"Using default Steam library path: {default_path}")
+            logger.info(f"Using default Steam library path: {default_path}")
             return default_path
 
         logger.error("No valid Steam library found via vdf or at default location.")

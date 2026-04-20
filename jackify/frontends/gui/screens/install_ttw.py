@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QHBoxLayo
 from PySide6.QtCore import Qt, QSize, QThread, Signal, QTimer, QProcess, QMetaObject, QUrl
 from PySide6.QtGui import QPixmap, QTextCursor, QPainter, QFont
 from ..shared_theme import JACKIFY_COLOR_BLUE, DEBUG_BORDERS
-from ..utils import ansi_to_html, strip_ansi_control_codes, set_responsive_minimum
+from ..utils import ansi_to_html, strip_ansi_control_codes, set_responsive_minimum, _get_sidebar_urls
 from ..widgets.unsupported_game_dialog import UnsupportedGameDialog
 from jackify.frontends.gui.widgets.file_progress_list import FileProgressList
 import os
@@ -37,6 +37,7 @@ from .install_ttw_workflow import TTWWorkflowMixin
 from .install_ttw_output import TTWOutputMixin
 from .install_ttw_ui import TTWUIMixin
 from .screen_back_mixin import ScreenBackMixin
+from jackify.frontends.gui.mixins.thread_lifecycle_mixin import ThreadLifecycleMixin
 
 class ModlistFetchThread(QThread):
     result = Signal(list, str)
@@ -77,7 +78,7 @@ class ModlistFetchThread(QThread):
             # Don't write to log file before workflow starts - just return error
             self.result.emit([], error_msg)
 
-class InstallTTWScreen(ScreenBackMixin, TTWUISetupMixin, TTWIntegrationMixin, TTWRequirementsMixin, TTWLifecycleMixin, QWidget, TTWWorkflowMixin, TTWOutputMixin, TTWUIMixin):
+class InstallTTWScreen(ThreadLifecycleMixin, ScreenBackMixin, TTWUISetupMixin, TTWIntegrationMixin, TTWRequirementsMixin, TTWLifecycleMixin, QWidget, TTWWorkflowMixin, TTWOutputMixin, TTWUIMixin):
     resize_request = Signal(str)
     integration_complete = Signal(bool, str)  # Signal for modlist integration completion (success, ttw_version)
     
@@ -151,24 +152,24 @@ class InstallTTWScreen(ScreenBackMixin, TTWUISetupMixin, TTWIntegrationMixin, TT
         pass
 
     def browse_wabbajack_file(self):
-        # Use QFileDialog instance to ensure consistent dialog style
         start_path = self.file_edit.text() if self.file_edit.text() else os.path.expanduser("~")
         dialog = QFileDialog(self, "Select TTW .mpi File")
         dialog.setFileMode(QFileDialog.ExistingFile)
         dialog.setNameFilter("MPI Files (*.mpi);;All Files (*)")
         dialog.setDirectory(start_path)
-        dialog.setOption(QFileDialog.DontUseNativeDialog, True)  # Force Qt dialog for consistency
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        dialog.setSidebarUrls(_get_sidebar_urls())
         if dialog.exec() == QDialog.Accepted:
             files = dialog.selectedFiles()
             if files:
                 self.file_edit.setText(files[0])
 
     def browse_install_dir(self):
-        # Use QFileDialog instance to match file browser style exactly
         dialog = QFileDialog(self, "Select Install Directory")
         dialog.setFileMode(QFileDialog.Directory)
         dialog.setOption(QFileDialog.ShowDirsOnly, True)
-        dialog.setOption(QFileDialog.DontUseNativeDialog, True)  # Force Qt dialog to match file browser
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        dialog.setSidebarUrls(_get_sidebar_urls())
         if self.install_dir_edit.text():
             dialog.setDirectory(self.install_dir_edit.text())
         if dialog.exec() == QDialog.Accepted:
@@ -302,28 +303,13 @@ class InstallTTWScreen(ScreenBackMixin, TTWUISetupMixin, TTWIntegrationMixin, TT
 
     def cleanup_processes(self):
         """Clean up any running processes when the window closes or is cancelled"""
-        logger.debug("DEBUG: cleanup_processes called - cleaning up InstallationThread and other processes")
-        
-        # install_thread uses cancel() for cooperative shutdown before terminate.
-        if hasattr(self, 'install_thread') and self.install_thread and self.install_thread.isRunning():
-            logger.debug("DEBUG: Cancelling running InstallationThread")
-            self.install_thread.cancel()
-            self.install_thread.wait(3000)
-            if self.install_thread.isRunning():
-                self.install_thread.terminate()
-                self.install_thread.wait(2000)
-            self.install_thread = None
+        # Disconnect all signals first - prevents callbacks to a dying widget.
+        self._park_all_threads()
 
-        from PySide6.QtCore import QThread
-        for attr_name, value in list(vars(self).items()):
-            if attr_name == 'install_thread':
-                continue
+        # install_thread gets a cooperative cancel signal on top of the park.
+        if hasattr(self, 'install_thread') and self.install_thread and self.install_thread.isRunning():
             try:
-                if isinstance(value, QThread) and value.isRunning():
-                    logger.debug(f"DEBUG: Terminating {attr_name}")
-                    value.terminate()
-                    value.wait(2000)
-                    setattr(self, attr_name, None)
+                self.install_thread.cancel()
             except Exception:
                 pass
     
@@ -355,29 +341,13 @@ class InstallTTWScreen(ScreenBackMixin, TTWUISetupMixin, TTWIntegrationMixin, TT
                     font-size: 13px;
                 """)
 
-            # Cancel the installation thread if it exists
-            if hasattr(self, 'install_thread') and self.install_thread and self.install_thread.isRunning():
-                self.install_thread.cancel()
-                self.install_thread.wait(3000)  # Wait up to 3 seconds for graceful shutdown
-                if self.install_thread.isRunning():
-                    self.install_thread.terminate()  # Force terminate if needed
-                    self.install_thread.wait(1000)
-            
-            # Cancel the automated prefix thread if it exists
-            if hasattr(self, 'prefix_thread') and self.prefix_thread and self.prefix_thread.isRunning():
-                self.prefix_thread.terminate()
-                self.prefix_thread.wait(3000)  # Wait up to 3 seconds for graceful shutdown
-                if self.prefix_thread.isRunning():
-                    self.prefix_thread.terminate()  # Force terminate if needed
-                    self.prefix_thread.wait(1000)
-            
-            # Cancel the configuration thread if it exists
-            if hasattr(self, 'config_thread') and self.config_thread and self.config_thread.isRunning():
-                self.config_thread.terminate()
-                self.config_thread.wait(3000)  # Wait up to 3 seconds for graceful shutdown
-                if self.config_thread.isRunning():
-                    self.config_thread.terminate()  # Force terminate if needed
-                    self.config_thread.wait(1000)
+            # Park all threads first (disconnects signals), then send cooperative cancel.
+            self._park_all_threads()
+            if hasattr(self, 'install_thread') and self.install_thread:
+                try:
+                    self.install_thread.cancel()
+                except Exception:
+                    pass
             
             # Cleanup any remaining processes
             self.cleanup_processes()

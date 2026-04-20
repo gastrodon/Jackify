@@ -59,33 +59,11 @@ class ModlistWineOpsMixin:
             self.logger.error("Could not locate Steam's config.vdf file.")
             return False, 'config_vdf_missing'
 
-        # Add a short delay to allow Steam to potentially finish writing changes
-        self.logger.debug("Waiting 2 seconds before reading config.vdf...")
-        time.sleep(2)
-
         try:
-            self.logger.debug(f"Attempting to load VDF file: {config_vdf_path}")
-            # CORRECTION: Use the vdf library directly here, not VDFHandler
+            self.logger.debug(f"Loading config.vdf: {config_vdf_path}")
             with open(str(config_vdf_path), 'r') as f:
-                 config_data = vdf.load(f, mapper=vdf.VDFDict)
+                config_data = vdf.load(f, mapper=vdf.VDFDict)
 
-            # --- Write full config.vdf to a debug file ---
-            debug_dump_path = os.path.expanduser("~/dev/Jackify/configvdf_dump.txt")
-            with open(debug_dump_path, "w") as dump_f:
-                json.dump(config_data, dump_f, indent=2)
-            self.logger.info(f"Full config.vdf dumped to {debug_dump_path}")
-
-            # --- Log only the relevant section for this AppID ---
-            steam_config_section = config_data.get('InstallConfigStore', {}).get('Software', {}).get('Valve', {}).get('Steam', {})
-            compat_mapping = steam_config_section.get('CompatToolMapping', {})
-            app_mapping = compat_mapping.get(appid_to_check, {})
-            self.logger.debug("───────────────────────────────────────────────────────────────────")
-            self.logger.debug(f"Config.vdf entry for AppID {appid_to_check} (CompatToolMapping):")
-            self.logger.debug(json.dumps({appid_to_check: app_mapping}, indent=2))
-            self.logger.debug("───────────────────────────────────────────────────────────────────")
-            self.logger.debug(f"Steam config section from VDF: {json.dumps(steam_config_section, indent=2)}")
-            # --- End Debugging ---
-            
             # Navigate the structure: Software -> Valve -> Steam -> CompatToolMapping -> appid_to_check -> Name
             compat_mapping = steam_config_section.get('CompatToolMapping', {})
             app_mapping = compat_mapping.get(appid_to_check, {})
@@ -152,14 +130,24 @@ class ModlistWineOpsMixin:
         self.logger.info(f"Proton setup verification successful for AppID {appid_to_check}.")
         return True, 'ok'
 
-    def set_steam_grid_images(self, appid: str, modlist_dir: str):
+    def set_steam_grid_images(self, appid: str, modlist_dir: str, game_type: str = None):
         """
-        Copies hero, logo, and poster images from the modlist's SteamIcons directory
-        to the grid directory of all non-zero Steam user directories, named after the new AppID.
+        Copies artwork from the modlist's SteamIcons directory to Steam's grid folder.
+        Falls back to SteamGridDB if no SteamIcons directory is present and an API key
+        is configured.
         """
+        if modlist_dir:
+            try:
+                from jackify.backend.services.steamgriddb_service import detect_game_type_from_modlist
+                detected_game_type = detect_game_type_from_modlist(modlist_dir)
+                if detected_game_type:
+                    game_type = detected_game_type
+            except Exception as e:
+                self.logger.debug(f"Steam artwork game type auto-detect failed for {modlist_dir}: {e}")
+
         steam_icons_dir = Path(modlist_dir) / "SteamIcons"
         if not steam_icons_dir.is_dir():
-            self.logger.info(f"No SteamIcons directory found at {steam_icons_dir}, skipping grid image copy.")
+            self._try_steamgriddb_artwork(appid, game_type, modlist_dir)
             return
 
         # Find all non-zero Steam user directories
@@ -177,8 +165,8 @@ class ModlistWineOpsMixin:
             images = [
                 ("grid-hero.png", f"{appid}_hero.png"),
                 ("grid-logo.png", f"{appid}_logo.png"),
-                ("grid-tall.png", f"{appid}.png"),
                 ("grid-tall.png", f"{appid}p.png"),
+                ("grid-wide.png", f"{appid}.png"),
             ]
 
             for src_name, dest_name in images:
@@ -191,7 +179,85 @@ class ModlistWineOpsMixin:
                     except Exception as e:
                         self.logger.error(f"Failed to copy {src_path} to {dest_path}: {e}")
                 else:
-                    self.logger.warning(f"Image {src_path} not found; skipping.")
+                    self.logger.debug(f"Image {src_path} not found; skipping.")
+
+            # Tenfoot: use explicit file if provided, otherwise resize the landscape grid
+            tenfoot_src = steam_icons_dir / "grid-tenfoot.png"
+            tenfoot_dest = grid_dir / f"{appid}_tenfoot.png"
+            wide_src = steam_icons_dir / "grid-wide.png"
+            if tenfoot_src.exists():
+                try:
+                    shutil.copyfile(tenfoot_src, tenfoot_dest)
+                    self.logger.info(f"Copied {tenfoot_src} to {tenfoot_dest}")
+                except Exception as e:
+                    self.logger.error(f"Failed to copy tenfoot image: {e}")
+            elif wide_src.exists():
+                try:
+                    from PySide6.QtGui import QImage
+                    img = QImage(str(wide_src))
+                    if not img.isNull():
+                        scaled = img.scaled(600, 350)
+                        scaled.save(str(tenfoot_dest))
+                        self.logger.info(f"Generated tenfoot image from landscape: {tenfoot_dest}")
+                    else:
+                        self.logger.warning(f"Could not load landscape image for tenfoot generation: {wide_src}")
+                except Exception as e:
+                    self.logger.warning(f"Could not generate tenfoot image: {e}")
+
+    def _try_steamgriddb_artwork(self, appid: str, game_type: str = None, modlist_dir: str = None):
+        """Fetch default artwork from SteamGridDB when no modlist-provided SteamIcons exist."""
+        if not game_type and modlist_dir:
+            from jackify.backend.services.steamgriddb_service import detect_game_type_from_modlist
+            game_type = detect_game_type_from_modlist(modlist_dir)
+        if not game_type:
+            self.logger.warning(f"SteamGridDB fallback skipped: could not detect game type for {modlist_dir}")
+            return
+
+        userdata_base = Path.home() / ".steam/steam/userdata"
+        if not userdata_base.is_dir():
+            return
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            from jackify.backend.services.steamgriddb_service import fetch_artwork
+            count = fetch_artwork(game_type, tmp_dir)
+            if count == 0:
+                self.logger.debug(f"SteamGridDB returned no artwork for game type: {game_type}")
+                return
+
+            for user_dir in userdata_base.iterdir():
+                if not user_dir.is_dir() or user_dir.name == "0":
+                    continue
+                grid_dir = user_dir / "config/grid"
+                grid_dir.mkdir(parents=True, exist_ok=True)
+
+                images = [
+                    ("grid-tall.png", f"{appid}p.png"),
+                    ("grid-wide.png", f"{appid}.png"),
+                    ("grid-hero.png", f"{appid}_hero.png"),
+                    ("grid-logo.png", f"{appid}_logo.png"),
+                ]
+                for src_name, dest_name in images:
+                    src = tmp_dir / src_name
+                    if src.exists():
+                        try:
+                            shutil.copyfile(src, grid_dir / dest_name)
+                        except Exception as e:
+                            self.logger.warning(f"Failed to copy {src_name}: {e}")
+
+                # Generate tenfoot from landscape
+                wide = tmp_dir / "grid-wide.png"
+                if wide.exists():
+                    try:
+                        from PySide6.QtGui import QImage
+                        img = QImage(str(wide))
+                        if not img.isNull():
+                            img.scaled(600, 350).save(str(grid_dir / f"{appid}_tenfoot.png"))
+                    except Exception as e:
+                        self.logger.debug(f"Could not generate tenfoot: {e}")
+
+            self.logger.info(f"Applied SteamGridDB artwork for game type '{game_type}' ({count} images)")
 
     def get_modlist_wine_components(self, modlist_name, game_var_full=None):
         """
@@ -206,12 +272,16 @@ class ModlistWineOpsMixin:
         game = (game_var_full or modlist_name or "").lower().replace(" ", "")
         # Add game-specific extras
         if "skyrim" in game or "fallout4" in game or "starfield" in game or "oblivion_remastered" in game or "enderal" in game:
-            extras += ["d3dcompiler_47", "d3dx11_43", "d3dcompiler_43", "dotnet6", "dotnet7"]
+            extras += ["d3dcompiler_47", "d3dx11_43", "d3dcompiler_43", "dotnet6", "dotnet7", "dotnet8", "dotnetdesktop6"]
         elif "falloutnewvegas" in game or "fnv" in game or "fallout3" in game or "fo3" in game or "oblivion" in game:
             extras += ["d3dx9_43", "d3dx9"]
+        elif "cp2077" in game or "cyberpunk" in game:
+            extras += ["d3dcompiler_47", "d3dx11_43", "d3dcompiler_43", "dotnet6", "dotnet7", "dotnet8", "dotnetdesktop6"]
+        elif "bg3" in game or "baldursgate" in game:
+            extras += ["d3dcompiler_47", "d3dx11_43", "d3dcompiler_43", "dotnet6", "dotnet7", "dotnet8", "dotnetdesktop6"]
         else:
-            # Unknown game type — install the union of all known component sets
-            extras += ["d3dcompiler_47", "d3dx11_43", "d3dcompiler_43", "dotnet6", "dotnet7", "d3dx9_43", "d3dx9"]
+            # Unknown game type - install the union of all known component sets
+            extras += ["d3dcompiler_47", "d3dx11_43", "d3dcompiler_43", "dotnet6", "dotnet7", "dotnet8", "dotnetdesktop6", "d3dx9_43", "d3dx9"]
         # Add modlist-specific extras
         modlist_lower = modlist_name.lower().replace(" ", "") if modlist_name else ""
         for key, components in self.MODLIST_WINE_COMPONENTS.items():
@@ -224,37 +294,49 @@ class ModlistWineOpsMixin:
 
     def _re_enforce_windows_10_mode(self):
         """
-        Re-enforce Windows 10 mode after modlist-specific configurations.
-        This matches the legacy script behavior (line 1333) where Windows 10 mode
-        is re-applied after modlist-specific steps to ensure consistency.
+        Re-enforce the final Windows version after modlist-specific configurations.
+        Re-applies win10 after modlist-specific winetricks components, which can
+        leave the prefix at a lower version.
         """
         try:
             if not hasattr(self, 'appid') or not self.appid:
-                self.logger.warning("Cannot re-enforce Windows 10 mode - no AppID available")
+                self.logger.warning("Cannot re-enforce Windows 11 mode - no AppID available")
                 return
 
             from ..handlers.winetricks_handler import WinetricksHandler
             from ..handlers.path_handler import PathHandler
 
-            # Get prefix path for the AppID
-            prefix_path = PathHandler.find_compat_data(str(self.appid))
-            if not prefix_path:
-                self.logger.warning("Cannot re-enforce Windows 10 mode - prefix path not found")
+            # Get prefix path for the AppID - must be compatdata/pfx/, not compatdata/
+            compatdata_path = PathHandler.find_compat_data(str(self.appid))
+            if not compatdata_path:
+                self.logger.warning("Cannot re-enforce Windows 11 mode - prefix path not found")
                 return
+            prefix_path = compatdata_path / "pfx"
 
-            # Use winetricks handler to set Windows 10 mode
+            # Use winetricks handler to set Windows 11 mode
             winetricks_handler = WinetricksHandler()
             wine_binary = winetricks_handler._get_wine_binary_for_prefix(str(prefix_path))
             if not wine_binary:
-                self.logger.warning("Cannot re-enforce Windows 10 mode - wine binary not found")
+                self.logger.warning("Cannot re-enforce Windows 11 mode - wine binary not found")
                 return
 
-            winetricks_handler._set_windows_10_mode(str(prefix_path), wine_binary)
-
-            self.logger.info("Windows 10 mode re-enforced after modlist-specific configurations")
+            env = os.environ.copy()
+            env['WINEPREFIX'] = str(prefix_path)
+            env['WINE'] = wine_binary
+            result = subprocess.run(
+                [winetricks_handler.winetricks_path, '-q', 'win10'],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            if result.returncode == 0:
+                self.logger.info("Windows 11 mode re-enforced after modlist-specific configurations")
+            else:
+                self.logger.warning("Could not set Windows 11 mode: %s", result.stderr)
 
         except Exception as e:
-            self.logger.warning(f"Error re-enforcing Windows 10 mode: {e}")
+            self.logger.warning(f"Error re-enforcing Windows 11 mode: {e}")
 
     def _handle_symlinked_downloads(self) -> bool:
         """
@@ -380,21 +462,17 @@ class ModlistWineOpsMixin:
             env['WINEPREFIX'] = prefix_path
             env['WINEDEBUG'] = '-all'  # Suppress Wine debug output
 
-            # Shutdown any running wineserver processes to ensure clean slate
-            if wineserver_binary:
-                self.logger.debug("Shutting down wineserver before applying registry fixes...")
-                try:
-                    subprocess.run([wineserver_binary, '-w'], env=env, timeout=30, capture_output=True)
-                    self.logger.debug("Wineserver shutdown complete")
-                except Exception as e:
-                    self.logger.warning(f"Wineserver shutdown failed (non-critical): {e}")
+            self._wait_for_wineserver(prefix_path)
 
-            # Registry fix 1: Set *mscoree=native DLL override (asterisk for full override)
-            # Use native .NET runtime instead of Wine's
-            self.logger.debug("Setting *mscoree=native DLL override...")
+            # Registry fix 1: Set *mscoree=native as a per-exe AppDefaults override for
+            # SkyrimSE.exe only. A global DllOverrides entry breaks .NET 9/10 bootstrap
+            # (Synthesis), because the override intercepts mscoree loading for ALL processes
+            # including the SDK host. Scoping it to SkyrimSE.exe isolates the fix to the
+            # game process without affecting Synthesis or any other .NET tool.
+            self.logger.debug("Setting *mscoree=native AppDefaults override for SkyrimSE.exe...")
             cmd1 = [
                 wine_binary, 'reg', 'add',
-                'HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides',
+                'HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\SkyrimSE.exe\\DllOverrides',
                 '/v', '*mscoree', '/t', 'REG_SZ', '/d', 'native', '/f'
             ]
 
@@ -430,43 +508,12 @@ class ModlistWineOpsMixin:
                 except Exception as e:
                     self.logger.warning(f"Registry flush failed (non-critical): {e}")
 
-            # VERIFICATION: Confirm the registry entries persisted
-            self.logger.info("Verifying registry entries were applied and persisted...")
-            verification_passed = True
-
-            # Verify *mscoree=native
-            verify_cmd1 = [
-                wine_binary, 'reg', 'query',
-                'HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides',
-                '/v', '*mscoree'
-            ]
-            verify_result1 = subprocess.run(verify_cmd1, env=env, capture_output=True, text=True, errors='replace', timeout=30)
-            if verify_result1.returncode == 0 and 'native' in verify_result1.stdout:
-                self.logger.info("VERIFIED: *mscoree=native is set correctly")
+            ok = result1.returncode == 0 and result2.returncode == 0
+            if ok:
+                self.logger.info("Universal dotnet4.x compatibility fixes applied and flushed")
             else:
-                self.logger.error(f"VERIFICATION FAILED: *mscoree=native not found in registry. Query output: {verify_result1.stdout}")
-                verification_passed = False
-
-            # Verify OnlyUseLatestCLR=1
-            verify_cmd2 = [
-                wine_binary, 'reg', 'query',
-                'HKEY_LOCAL_MACHINE\\Software\\Microsoft\\.NETFramework',
-                '/v', 'OnlyUseLatestCLR'
-            ]
-            verify_result2 = subprocess.run(verify_cmd2, env=env, capture_output=True, text=True, errors='replace', timeout=30)
-            if verify_result2.returncode == 0 and ('0x1' in verify_result2.stdout or 'REG_DWORD' in verify_result2.stdout):
-                self.logger.info("VERIFIED: OnlyUseLatestCLR=1 is set correctly")
-            else:
-                self.logger.error(f"VERIFICATION FAILED: OnlyUseLatestCLR=1 not found in registry. Query output: {verify_result2.stdout}")
-                verification_passed = False
-
-            # Both fixes applied and verified
-            if result1.returncode == 0 and result2.returncode == 0 and verification_passed:
-                self.logger.info("Universal dotnet4.x compatibility fixes applied, flushed, and verified successfully")
-                return True
-            else:
-                self.logger.error("Registry fixes failed verification - fixes may not persist across prefix restarts")
-                return False
+                self.logger.error("One or more dotnet4.x registry commands failed - see errors above")
+            return ok
 
         except Exception as e:
             self.logger.error(f"Failed to apply universal dotnet4.x fixes: {e}")
@@ -506,6 +553,204 @@ class ModlistWineOpsMixin:
             self.logger.error(f"Error finding Wine binary: {e}")
             return None
 
+    def _wait_for_wineserver(self, prefix_path: str) -> None:
+        """Wait for wineserver to stop for the given prefix before direct file edits.
+
+        Harmless if wineserver is already stopped - exits immediately.
+        Prevents in-memory hive flush from overwriting direct .reg file edits.
+        """
+        wine_binary = self._find_wine_binary_for_registry()
+        if not wine_binary:
+            self.logger.debug("No wine binary found; skipping wineserver wait")
+            return
+        wineserver = os.path.join(os.path.dirname(wine_binary), "wineserver")
+        if not os.path.exists(wineserver):
+            self.logger.debug("wineserver binary not found; skipping wait")
+            return
+        env = os.environ.copy()
+        env["WINEPREFIX"] = prefix_path
+        env["WINEDEBUG"] = "-all"
+        try:
+            subprocess.run([wineserver, "-w"], env=env, timeout=30, capture_output=True)
+            self.logger.debug("wineserver stopped for prefix %s", prefix_path)
+        except Exception as e:
+            self.logger.debug("wineserver wait returned non-zero (likely already stopped): %s", e)
+
+    def _apply_modlist_registry_tweaks(self) -> bool:
+        """Write user.reg values required for modlist operation.
+
+          - FontSmoothing/Type/Gamma/Orientation  (ClearType subpixel rendering)
+          - HIGHDPIAWARE                           (prevents Wine DPI scaling on tools)
+          - ShowDotFiles=Y                         (MO2 must see hidden dirs inside the prefix)
+        """
+        try:
+            prefix_path = os.path.join(str(self.compat_data_path), "pfx")
+            user_reg = os.path.join(prefix_path, "user.reg")
+            if not os.path.exists(user_reg):
+                self.logger.warning("user.reg not found at %s; skipping modlist registry tweaks", user_reg)
+                return False
+
+            self._wait_for_wineserver(prefix_path)
+
+            tweaks = [
+                (
+                    "[Control Panel\\\\Desktop]",
+                    '"FontSmoothing"',
+                    '"2"',
+                ),
+                (
+                    "[Control Panel\\\\Desktop]",
+                    '"FontSmoothingGamma"',
+                    "dword:00000578",
+                ),
+                (
+                    "[Control Panel\\\\Desktop]",
+                    '"FontSmoothingOrientation"',
+                    "dword:00000001",
+                ),
+                (
+                    "[Control Panel\\\\Desktop]",
+                    '"FontSmoothingType"',
+                    "dword:00000002",
+                ),
+                (
+                    "[Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\AppCompatFlags\\\\Layers]",
+                    '@',
+                    '"~ HIGHDPIAWARE"',
+                ),
+                (
+                    "[Software\\\\Wine]",
+                    '"ShowDotFiles"',
+                    '"Y"',
+                ),
+            ]
+
+            with open(user_reg, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+
+            for section, key, value in tweaks:
+                in_section = False
+                updated = False
+                insert_at = None
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    if stripped.lower() == section.lower():
+                        in_section = True
+                        continue
+                    if stripped.startswith("[") and in_section:
+                        insert_at = i
+                        break
+                    if in_section and stripped.lower().startswith(key.lower()):
+                        lines[i] = f"{key}={value}\n"
+                        updated = True
+                        break
+
+                if not updated:
+                    entry = f"{key}={value}\n"
+                    if insert_at is not None:
+                        lines.insert(insert_at, entry)
+                    elif in_section:
+                        lines.append(entry)
+                    else:
+                        lines.append(f"\n{section}\n")
+                        lines.append(entry)
+
+            with open(user_reg, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+
+            self.logger.info("Modlist registry tweaks applied (font smoothing, HIGHDPIAWARE, ShowDotFiles)")
+            return True
+
+        except Exception as e:
+            self.logger.error("Failed to apply modlist registry tweaks: %s", e)
+            return False
+
+    def _audit_registry_state(self) -> bool:
+        """Read user.reg and system.reg and log whether every expected value is present.
+
+        Returns True only when all checks pass. Logs a WARNING for each missing or
+        wrong value so the application log always carries a clear post-configuration
+        record of registry state.
+        """
+        try:
+            prefix_path = os.path.join(str(self.compat_data_path), "pfx")
+            user_reg = os.path.join(prefix_path, "user.reg")
+            system_reg = os.path.join(prefix_path, "system.reg")
+
+            def _read(path):
+                if not os.path.exists(path):
+                    return ""
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    return f.read()
+
+            user_content = _read(user_reg)
+            system_content = _read(system_reg)
+
+            checks = [
+                # (description, file_content, expected_substring)
+                (
+                    "ShowDotFiles=Y (user.reg)",
+                    user_content,
+                    '"ShowDotFiles"="Y"',
+                ),
+                (
+                    "FontSmoothing=2 (user.reg)",
+                    user_content,
+                    '"FontSmoothing"="2"',
+                ),
+                (
+                    "FontSmoothingType=2 (user.reg)",
+                    user_content,
+                    '"FontSmoothingType"=dword:00000002',
+                ),
+                (
+                    "FontSmoothingGamma (user.reg)",
+                    user_content,
+                    '"FontSmoothingGamma"=dword:00000578',
+                ),
+                (
+                    "FontSmoothingOrientation (user.reg)",
+                    user_content,
+                    '"FontSmoothingOrientation"=dword:00000001',
+                ),
+                (
+                    "HIGHDPIAWARE (user.reg)",
+                    user_content,
+                    'HIGHDPIAWARE',
+                ),
+                (
+                    "*mscoree=native (user.reg)",
+                    user_content,
+                    '"*mscoree"="native"',
+                ),
+                (
+                    "OnlyUseLatestCLR=1 (system.reg)",
+                    system_content,
+                    '"OnlyUseLatestCLR"=dword:00000001',
+                ),
+            ]
+
+            all_ok = True
+            for description, content, needle in checks:
+                if needle in content:
+                    self.logger.info("Registry audit [OK] %s", description)
+                else:
+                    self.logger.warning("Registry audit [MISSING] %s", description)
+                    all_ok = False
+
+            if all_ok:
+                self.logger.info("Registry audit complete - all values confirmed present")
+            else:
+                self.logger.warning(
+                    "Registry audit complete - one or more values missing; "
+                    "see [MISSING] entries above"
+                )
+            return all_ok
+
+        except Exception as e:
+            self.logger.error("Registry audit failed with exception: %s", e)
+            return False
+
     def _search_wine_in_proton_directory(self, proton_path: Path) -> Optional[str]:
         """
         Recursively search for wine binary within a Proton directory.
@@ -543,4 +788,3 @@ class ModlistWineOpsMixin:
         except Exception as e:
             self.logger.debug(f"Error during recursive wine search in {proton_path}: {e}")
             return None
-

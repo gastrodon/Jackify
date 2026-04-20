@@ -214,4 +214,56 @@ class LoggingHandler:
 
     def get_general_logger(self):
         """Get the general CLI logger ({jackify_data_dir}/logs/jackify-cli.log)."""
-        return self.setup_logger('jackify_cli', is_general=True) 
+        return self.setup_logger('jackify_cli', is_general=True)
+
+    def setup_application_logging(self, debug_mode: bool = False) -> logging.Logger:
+        """Configure the root logger for the application.
+
+        Always-on: jackify.log at INFO level.
+        Debug mode only: jackify-debug.log at DEBUG level.
+        Console: WARNING in both modes.
+
+        Call once at application startup before any other loggers are created.
+        """
+        root = logging.getLogger()
+        # Clear any handlers set by basicConfig or previous calls
+        root.handlers.clear()
+        # Root must pass everything through - handlers do the filtering
+        root.setLevel(logging.DEBUG)
+        root.propagate = False
+
+        file_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+
+        # Always-on application log at INFO - rotate on every startup, keep 5
+        app_log_path = self.log_dir / 'jackify.log'
+        self.rotate_log_file_per_run(app_log_path)
+        app_handler = logging.handlers.RotatingFileHandler(
+            app_log_path, mode='a', encoding='utf-8',
+            maxBytes=10 * 1024 * 1024, backupCount=5
+        )
+        app_handler.setLevel(logging.INFO)
+        app_handler.setFormatter(file_formatter)
+        root.addHandler(app_handler)
+
+        # Debug log only when explicitly enabled
+        if debug_mode:
+            debug_log_path = self.log_dir / 'jackify-debug.log'
+            self.rotate_log_file_per_run(debug_log_path)
+            debug_handler = logging.handlers.RotatingFileHandler(
+                debug_log_path, mode='a', encoding='utf-8',
+                maxBytes=100 * 1024 * 1024, backupCount=5
+            )
+            debug_handler.setLevel(logging.DEBUG)
+            debug_handler.setFormatter(file_formatter)
+            root.addHandler(debug_handler)
+
+        # Console: errors only - warnings and below go to jackify.log
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.ERROR)
+        console_handler.setFormatter(console_formatter)
+        root.addHandler(console_handler)
+
+        return root

@@ -155,7 +155,7 @@ class InstallModlistUISetupMixin:
         online_layout = QHBoxLayout()
         online_layout.setContentsMargins(0, 0, 0, 0)
         # --- Game Type Selection ---
-        self.game_types = ["Skyrim", "Fallout 4", "Fallout New Vegas", "Oblivion", "Starfield", "Oblivion Remastered", "Enderal", "Other"]
+        self.game_types = ["Skyrim", "Fallout 4", "Fallout New Vegas", "Oblivion", "Starfield", "Oblivion Remastered", "Enderal", "Skyrim VR", "Fallout 4 VR", "Baldur's Gate 3", "Other"]
         self.game_type_btn = QPushButton("Please Select...")
         self.game_type_btn.setMinimumWidth(200)
         self.game_type_btn.clicked.connect(self.open_game_type_dialog)

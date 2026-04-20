@@ -26,7 +26,7 @@ class NexusPremiumService:
             is_oauth: True when auth_token is an OAuth Bearer token.
 
         Returns:
-            (is_premium, username) — both None/False on failure.
+            (is_premium, username) - both None/False on failure.
         """
         cached = self._read_cache(auth_token, is_oauth=is_oauth)
         if cached is not None:

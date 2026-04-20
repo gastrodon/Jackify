@@ -38,8 +38,8 @@ class MainWindowUIMixin:
         self.main_menu = MainMenu(stacked_widget=self.stacked_widget, dev_mode=dev_mode)
         self.stacked_widget.addWidget(self.main_menu)          # index 0
 
-        # Indexes 1-9: insert lightweight placeholders now; real screens on demand.
-        for _ in range(9):
+        # Indexes 1-11: insert lightweight placeholders now; real screens on demand.
+        for _ in range(11):
             self.stacked_widget.addWidget(_LazyPlaceholder())
 
         # Factory map: index -> callable that creates and caches the real screen.
@@ -53,6 +53,8 @@ class MainWindowUIMixin:
             7: self._make_wabbajack_installer_screen,
             8: self._make_configure_existing_modlist_screen,
             9: self._make_install_mo2_screen,
+            10: self._make_third_party_tools_screen,
+            11: self._make_configure_tool_config_screen,
         }
 
         self.stacked_widget.currentChanged.connect(self._lazy_init_screen)
@@ -121,7 +123,7 @@ class MainWindowUIMixin:
         # Block signals for the entire swap including setCurrentWidget so that:
         # (a) Qt's auto-current-change on removeWidget doesn't cascade into the
         #     other placeholders via a re-entrant _lazy_init_screen call, and
-        # (b) setCurrentWidget does not fire a second currentChanged — the outer
+        # (b) setCurrentWidget does not fire a second currentChanged - the outer
         #     currentChanged (which triggered this lazy init) is still being
         #     dispatched and will reach _debug_screen_change with the real screen
         #     already in place, so reset_screen_to_defaults runs exactly once.
@@ -226,6 +228,22 @@ class MainWindowUIMixin:
             pass
         return screen
 
+    def _make_third_party_tools_screen(self):
+        from jackify.frontends.gui.screens.third_party_tools import ThirdPartyToolsScreen
+        screen = ThirdPartyToolsScreen(
+            stacked_widget=self.stacked_widget, main_menu_index=0,
+        )
+        self.third_party_tools_screen = screen
+        return screen
+
+    def _make_configure_tool_config_screen(self):
+        from jackify.frontends.gui.screens.configure_tool_config_screen import ConfigureToolConfigScreen
+        screen = ConfigureToolConfigScreen(
+            stacked_widget=self.stacked_widget, additional_tasks_index=3,
+        )
+        self.configure_tool_config_screen = screen
+        return screen
+
     def _debug_screen_change(self, index):
         try:
             idx = int(index) if index is not None else 0
@@ -253,6 +271,8 @@ class MainWindowUIMixin:
                 7: "Wabbajack Installer",
                 8: "Configure Existing Modlist",
                 9: "Install MO2 Screen",
+                10: "Third Party Tools",
+                11: "Configure Tool Compatibility",
             }
             screen_name = screen_names.get(idx, f"Unknown Screen (Index {idx})")
             widget = self.stacked_widget.widget(idx)

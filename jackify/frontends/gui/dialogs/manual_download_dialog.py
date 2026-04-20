@@ -361,7 +361,8 @@ class ManualDownloadDialog(QDialog):
             logger.debug("Could not persist manual_download_concurrent_limit", exc_info=True)
 
     def _on_pick_folder(self) -> None:
-        chosen = QFileDialog.getExistingDirectory(self, "Select watch folder", str(self._watch_dir))
+        from jackify.frontends.gui.utils import browse_directory
+        chosen = browse_directory(self, "Select watch folder", str(self._watch_dir))
         if chosen:
             from jackify.backend.services.download_watcher_service import WatcherConfig
             self._watch_dir = Path(chosen)
@@ -441,7 +442,7 @@ class ManualDownloadDialog(QDialog):
     def _on_all_done_slot(self, completed: int, skipped: int) -> None:
         from PySide6.QtCore import QTimer
         self._progress_label.setText(
-            f"All downloads complete ({completed} accepted, {skipped} deferred) — closing..."
+            f"All downloads complete ({completed} accepted, {skipped} deferred) - closing..."
         )
         # Raise now while the dialog is still visible so the user sees the completion state
         self._raise_main_window()

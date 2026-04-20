@@ -81,7 +81,7 @@ class ProtontricksSteamMixin:
                         self.logger.warning(f"Failed to set permission for Steam library folder {lib_path}: {e}")
 
             if steamdeck:
-                self.logger.warning("Checking for SDCard and setting permissions appropriately...")
+                self.logger.info("Checking for SDCard and setting permissions appropriately...")
                 result = subprocess.run(["df", "-h"], capture_output=True, text=True, env=env)
                 for line in result.stdout.splitlines():
                     if "/run/media" in line:

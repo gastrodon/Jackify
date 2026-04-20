@@ -14,6 +14,11 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 
 logger = logging.getLogger(__name__)
 
+# Keep references to orphaned workers alive until they finish naturally.
+# If cleanup() is called while a long-running worker (e.g. BSA decompression)
+# is still going, dropping self._worker would let GC destroy a running QThread.
+_ORPHANED_WORKERS: set = set()
+
 
 class _VNVWorker(QThread):
     """Background thread for VNV automation."""
@@ -183,7 +188,7 @@ class VNVAutomationController(QObject):
                         )
                         return True
                     else:
-                        # Nexus API unavailable — can't auto-track the download.
+                        # Nexus API unavailable - can't auto-track the download.
                         # Open the mod page so the user can get it manually and inform
                         # them where to place it so the worker finds it next time.
                         logger.warning("VNV non-premium: Nexus API query failed, cannot open download manager")
@@ -195,7 +200,7 @@ class VNVAutomationController(QObject):
                         from .message_service import MessageService
                         MessageService.information(
                             parent,
-                            "VNV Tools — Manual Download Required",
+                            "VNV Tools - Manual Download Required",
                             "Jackify could not query the Nexus download URL(s) (check your Nexus login in Settings).\n\n"
                             "Your modlist has been installed successfully.\n\n"
                             "To complete VNV post-install setup, please:\n"
@@ -204,7 +209,7 @@ class VNVAutomationController(QObject):
                             "2. Download the BSA Decompressor package from:\n"
                             "   nexusmods.com/newvegas/mods/65854\n\n"
                             f"3. Place the archive(s) in:\n   {vnv_service.cache_dir}\n\n"
-                            "4. Re-configure the modlist — Jackify will detect the files automatically.",
+                            "4. Re-configure the modlist - Jackify will detect the files automatically.",
                         )
                         return False
 
@@ -224,7 +229,7 @@ class VNVAutomationController(QObject):
             return False
 
     def _dispatch_worker_start(self):
-        """Slot — always runs on the main thread due to queued signal delivery."""
+        """Slot - always runs on the main thread due to queued signal delivery."""
         if self._pending_worker_start:
             fn = self._pending_worker_start
             self._pending_worker_start = None
@@ -254,7 +259,7 @@ class VNVAutomationController(QObject):
 
         def _on_all_done(_completed, _skipped):
             # _check_all_done() runs in the watcher background thread (Python
-            # threading.Thread — no Qt event loop).  QTimer.singleShot is
+            # threading.Thread - no Qt event loop).  QTimer.singleShot is
             # unreliable from non-Qt threads.  Instead, emit a signal: because
             # VNVAutomationController was created on the main thread, Qt uses a
             # queued connection automatically and delivers the slot on the main thread.
@@ -397,6 +402,9 @@ class VNVAutomationController(QObject):
         self._pending_worker_start = None
         self._stop_manual_download_flow()
         if self._worker and self._worker.isRunning():
-            self._worker.terminate()
-            self._worker.wait(2000)
-            self._worker = None
+            # Worker may still be running a long operation (BSA decompression etc).
+            # Park it in the global set so the reference outlives this controller.
+            worker = self._worker
+            _ORPHANED_WORKERS.add(worker)
+            worker.finished.connect(lambda w=worker: _ORPHANED_WORKERS.discard(w))
+        self._worker = None

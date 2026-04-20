@@ -101,7 +101,7 @@ class TTWIntegrationMixin:
                 # Remember which screen to return to after TTW completes
                 self._ttw_return_screen_index = self.stacked_widget.currentIndex()
 
-                # Navigate first — triggers lazy init and reset_screen_to_defaults.
+                # Navigate first - triggers lazy init and reset_screen_to_defaults.
                 # set_modlist_integration_mode must be called AFTER so it overwrites
                 # the default dir that reset_screen_to_defaults populates.
                 self.stacked_widget.setCurrentIndex(5)

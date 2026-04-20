@@ -248,6 +248,40 @@ class ModlistGalleryDialog(ModlistGalleryFiltersMixin, ModlistGalleryLoadingMixi
         self.modlist_selected.emit(metadata)
         self.accept()
 
+    def closeEvent(self, event):
+        """Stop background threads before the dialog is destroyed."""
+        # Stop the loading dot animation timer first
+        timer = getattr(self, '_loading_dot_timer', None)
+        if timer is not None:
+            timer.stop()
+
+        for attr in ('_loader_thread', '_validation_thread'):
+            thread = getattr(self, attr, None)
+            if thread is None:
+                continue
+            # Disconnect all signals before terminating - prevents callbacks into
+            # a partially-destroyed dialog
+            try:
+                thread.disconnect()
+            except Exception:
+                pass
+            if thread.isRunning():
+                # terminate() is required here: these threads run plain Python code
+                # with no Qt event loop, so quit() is a no-op and wait() alone
+                # would time out, leaving the thread running when the C++ QThread
+                # object is destroyed (which aborts the process).
+                thread.terminate()
+                thread.wait(3000)
+
+        # Abort any pending image network requests
+        if hasattr(self, 'image_manager'):
+            try:
+                self.image_manager.network_manager.clearConnectionCache()
+            except Exception:
+                pass
+
+        super().closeEvent(event)
+
 # Re-export for backward compatibility
 __all__ = ['ImageManager', 'ModlistCard', 'ModlistDetailDialog', 'ModlistGalleryDialog']
 

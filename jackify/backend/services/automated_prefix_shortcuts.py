@@ -38,25 +38,29 @@ class ShortcutOperationsMixin(AutomatedPrefixShortcutsCleanupMixin):
             # Initialize native Steam service
             steam_service = NativeSteamService()
             
-            # Use custom launch options if provided, otherwise generate default
+            # Always compute STEAM_COMPAT_MOUNTS; custom_launch_options replaces %command% but
+            # still needs mounts so game assets on other drives are reachable inside the prefix.
+            mounts_prefix = ""
+            try:
+                from ..handlers.path_handler import PathHandler
+                path_handler = PathHandler()
+                mount_paths = path_handler.get_steam_compat_mount_paths(
+                    install_dir=modlist_install_dir, download_dir=download_dir
+                )
+                if mount_paths:
+                    mounts_prefix = f'STEAM_COMPAT_MOUNTS="{":".join(mount_paths)}"'
+                    logger.info(f"Generated STEAM_COMPAT_MOUNTS: {mounts_prefix}")
+            except Exception as e:
+                logger.warning(f"Could not generate STEAM_COMPAT_MOUNTS: {e}")
+
             if custom_launch_options:
-                launch_options = custom_launch_options
-                logger.info(f"Using pre-generated launch options: {launch_options}")
+                launch_options = f"{mounts_prefix} {custom_launch_options}".strip() if mounts_prefix else custom_launch_options
+                logger.info(f"Launch options (custom + mounts): {launch_options}")
+            elif mounts_prefix:
+                launch_options = f'{mounts_prefix} %command%'
+                logger.info(f"Launch options (mounts only): {launch_options}")
             else:
-                # Generate STEAM_COMPAT_MOUNTS including install and download mountpoints
                 launch_options = "%command%"
-                try:
-                    from ..handlers.path_handler import PathHandler
-                    path_handler = PathHandler()
-                    mount_paths = path_handler.get_steam_compat_mount_paths(
-                        install_dir=modlist_install_dir, download_dir=download_dir
-                    )
-                    if mount_paths:
-                        launch_options = f'STEAM_COMPAT_MOUNTS="{":".join(mount_paths)}" %command%'
-                        logger.info(f"Generated launch options with mounts: {launch_options}")
-                except Exception as e:
-                    logger.warning(f"Could not generate STEAM_COMPAT_MOUNTS, using default: {e}")
-                    launch_options = "%command%"
             
             # Get user's preferred Proton version (with Lorerim-specific override)
             proton_version = self._get_user_proton_version(shortcut_name)

@@ -89,7 +89,7 @@ class ProgressHandlersMixin:
             "When your browser opens a Nexus page, click <b>\"Slow Download\"</b>."
             " For non-Nexus manual links, follow the site instructions shown in the page.<br><br>"
             "<b>Watch folder:</b> Jackify watches the folder shown in that dialog for newly downloaded files. "
-            "Files detected there are validated and moved automatically into your modlist downloads folder — "
+            "Files detected there are validated and moved automatically into your modlist downloads folder - "
             "you do not need to move files manually. If your browser saves to a different location, "
             "please set the Watch Folder to that directory before starting the download of mod archives."
         )
@@ -132,7 +132,7 @@ class ProgressHandlersMixin:
                     self._stalled_download_start_time = time.time()
                     self._stalled_data_snapshot = progress_state.data_processed
                 elif progress_state.data_processed > self._stalled_data_snapshot:
-                    # Bytes are advancing despite 0 speed readout — engine reporting lag, not a real stall
+                    # Bytes are advancing despite 0 speed readout - engine reporting lag, not a real stall
                     self._stalled_download_start_time = time.time()
                     self._stalled_data_snapshot = progress_state.data_processed
                 else:
@@ -406,18 +406,6 @@ class ProgressHandlersMixin:
             if self._premium_failure_active:
                 message = "Installation stopped because Nexus Premium is required for automated downloads."
 
-            if not self._premium_failure_active and not cancellation_detected:
-                thread = getattr(self, 'install_thread', None)
-                if (thread
-                        and not getattr(thread, '_install_progress_started', False)
-                        and getattr(getattr(thread, 'last_error', None), 'title', '') == "Disk Full"):
-                    ctx = getattr(thread, '_last_error_raw_context', {})
-                    if self._handle_preflight_disk_space(ctx):
-                        return
-                    self._installation_cancelled = True
-                    self.process_finished(130, QProcess.NormalExit)
-                    return
-
             if not self._premium_failure_active:
                 engine_error = getattr(self.install_thread, 'last_error', None)
                 if engine_error:
@@ -428,98 +416,6 @@ class ProgressHandlersMixin:
             if self.show_details_checkbox.isChecked():
                 self._safe_append_text(f"\nError: {message}")
             self.process_finished(1, QProcess.CrashExit)  # Simulate error
-
-    def _handle_preflight_disk_space(self, ctx: dict) -> bool:
-        """Show pre-flight filesystem warning dialog. Returns True if user chose Continue Anyway."""
-        from PySide6.QtWidgets import QMessageBox
-
-        if ctx.get('offending_names'):
-            name_max = ctx.get('name_max', 255)
-            offending_names = ctx.get('offending_names') or []
-            examples = "\n".join(f"  {n}" for n in offending_names[:3])
-            if len(offending_names) > 3:
-                examples += f"\n  ...and {len(offending_names) - 3} more"
-            body = (
-                f"Your filesystem limits filenames to {name_max} characters, but this modlist "
-                f"contains files with longer names.\n\n"
-                f"Affected files:\n{examples}\n\n"
-                f"Installation may fail for those files. Using ext4, btrfs, or XFS on a "
-                f"non-encrypted mount is recommended.\n\n"
-                f"You can attempt to continue — some files may not extract correctly."
-            )
-            dlg = QMessageBox(self)
-            dlg.setWindowTitle("Filename Length Warning")
-            dlg.setText("Filesystem filename length limit detected.")
-            dlg.setInformativeText(body)
-            dlg.setIcon(QMessageBox.Warning)
-        else:
-            archive_bytes = ctx.get('archive_bytes', 0)
-            install_bytes = ctx.get('install_bytes', 0)
-            same_drive = ctx.get('same_drive', False)
-
-            def _fmt(b):
-                if b >= 1024 ** 3:
-                    return f"{b / 1024 ** 3:.1f} GB"
-                if b >= 1024 ** 2:
-                    return f"{b / 1024 ** 2:.1f} MB"
-                return f"{b} bytes" if b else "unknown"
-
-            if same_drive:
-                space_lines = (
-                    f"Downloads and install are on the same drive.\n"
-                    f"Archives require: {_fmt(archive_bytes)}\n"
-                    f"Installed files require: {_fmt(install_bytes)}"
-                )
-            else:
-                space_lines = (
-                    f"Download space required: {_fmt(archive_bytes)}\n"
-                    f"Install space required: {_fmt(install_bytes)}"
-                )
-
-            body = (
-                f"The disk space check reports that there may not be enough free space to complete "
-                f"this installation.\n\n"
-                f"{space_lines}\n\n"
-                f"If this is a modlist update, the actual space needed is likely far less — most files "
-                f"are already present and will be reused rather than re-downloaded.\n\n"
-                f"You can continue and free up space while downloads are running, "
-                f"or cancel to resolve the space issue first."
-            )
-            dlg = QMessageBox(self)
-            dlg.setWindowTitle("Disk Space Warning")
-            dlg.setText("Not enough free disk space detected.")
-            dlg.setInformativeText(body)
-            dlg.setIcon(QMessageBox.Warning)
-
-        continue_btn = dlg.addButton("Continue Anyway", QMessageBox.AcceptRole)
-        dlg.addButton("Cancel", QMessageBox.RejectRole)
-        dlg.setDefaultButton(continue_btn)
-        dlg.exec()
-
-        if dlg.clickedButton() is not continue_btn:
-            return False
-
-        thread = getattr(self, 'install_thread', None)
-        if not thread:
-            return False
-
-        modlist = getattr(thread, 'modlist', None)
-        install_dir = getattr(thread, 'install_dir', None)
-        downloads_dir = getattr(thread, 'downloads_dir', None)
-        api_key = getattr(thread, 'api_key', None)
-        install_mode = getattr(thread, 'install_mode', 'online')
-        oauth_info = getattr(thread, 'oauth_info', None)
-
-        if not (modlist and install_dir and downloads_dir and api_key):
-            return False
-
-        logger.info("Pre-flight filesystem check bypassed by user — restarting with --skip-disk-check")
-        self._safe_append_text("\n[WARN] Filesystem check bypassed. Continuing installation...\n")
-        self.run_modlist_installer(
-            modlist, install_dir, downloads_dir, api_key,
-            install_mode, oauth_info, skip_disk_check=True,
-        )
-        return True
 
     def process_finished(self, exit_code, exit_status):
         logger.debug(f"DEBUG: process_finished called with exit_code={exit_code}, exit_status={exit_status}")
@@ -600,6 +496,14 @@ class ProgressHandlersMixin:
                         self._safe_append_text(
                             f"Update mode: reusing existing Steam shortcut AppID {self._existing_shortcut_appid}."
                         )
+                        try:
+                            from jackify.backend.handlers.modlist_handler import ModlistHandler
+                            _game_type = self._detect_game_type_from_mo2_ini(install_dir)
+                            ModlistHandler().set_steam_grid_images(
+                                str(self._existing_shortcut_appid), install_dir, game_type=_game_type
+                            )
+                        except Exception as _e:
+                            logger.warning("Failed to apply Steam artwork on update install: %s", _e)
                         self.continue_configuration_after_automated_prefix(
                             self._existing_shortcut_appid,
                             modlist_name,

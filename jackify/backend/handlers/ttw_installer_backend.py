@@ -279,7 +279,7 @@ class TTWInstallerBackendMixin:
             mod_folder_name = f"[NoDelete] Tale of Two Wastelands {ttw_version}" if ttw_version else "[NoDelete] Tale of Two Wastelands"
             target_mod_dir = mods_dir / mod_folder_name
             if skip_copy:
-                # TTW was installed directly to target_mod_dir — no copy needed
+                # TTW was installed directly to target_mod_dir - no copy needed
                 logger.info("TTW already at target location, skipping copy: %s", target_mod_dir)
             else:
                 logger.info("Copying TTW output to %s", target_mod_dir)

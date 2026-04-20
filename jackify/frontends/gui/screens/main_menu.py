@@ -64,6 +64,7 @@ class MainMenu(QWidget):
         MENU_ITEMS = [
             ("Modlist Tasks", "modlist_tasks", "Manage your modlists with native Linux tools"),
             ("Additional Tasks", "additional_tasks", "Additional Tasks & Tools, such as TTW Installation"),
+            # ("Third Party Tools", "third_party_tools", "Install and manage Sulfur's Linux-native modding tools"),  # v0.7
             ("Exit Jackify", "exit_jackify", "Close the application"),
         ]
         
@@ -150,6 +151,8 @@ class MainMenu(QWidget):
             self.stacked_widget.setCurrentIndex(2)
         elif action_id == "additional_tasks" and self.stacked_widget:
             self.stacked_widget.setCurrentIndex(3)
+        elif action_id == "third_party_tools" and self.stacked_widget:
+            self.stacked_widget.setCurrentIndex(10)
         elif action_id == "return_main_menu":
             pass
         elif self.stacked_widget:

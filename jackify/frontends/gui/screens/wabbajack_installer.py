@@ -13,7 +13,7 @@ from typing import Optional
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFileDialog, QLineEdit, QGridLayout, QTextEdit, QTabWidget, QSizePolicy, QCheckBox,
+    QLineEdit, QGridLayout, QTextEdit, QTabWidget, QSizePolicy, QCheckBox,
     QMessageBox
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize
@@ -26,7 +26,7 @@ from ..dialogs.existing_setup_dialog import prompt_existing_setup_dialog
 from ..services.message_service import MessageService
 from ..shared_theme import JACKIFY_COLOR_BLUE, DEBUG_BORDERS
 from .screen_focus_reclaim import FocusReclaimMixin, STEAM_RESTART_SENTINEL
-from ..utils import set_responsive_minimum
+from ..utils import set_responsive_minimum, browse_directory
 from ..widgets.file_progress_list import FileProgressList
 from ..widgets.progress_indicator import OverallProgressIndicator
 from .screen_back_mixin import ScreenBackMixin
@@ -367,13 +367,7 @@ class WabbajackInstallerScreen(ScreenBackMixin, FocusReclaimMixin, QWidget):
 
     def _browse_folder(self):
         """Browse for installation folder"""
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "Select Wabbajack Installation Folder",
-            str(Path.home()),
-            QFileDialog.ShowDirsOnly
-        )
-
+        folder = browse_directory(self, "Select Wabbajack Installation Folder", str(Path.home()))
         if folder:
             self.install_folder = Path(folder).resolve()
             self.install_dir_edit.setText(str(self.install_folder))
@@ -626,6 +620,15 @@ class WabbajackInstallerScreen(ScreenBackMixin, FocusReclaimMixin, QWidget):
 
     def cleanup_processes(self):
         self._stop_focus_reclaim()
+        if self.worker is not None:
+            try:
+                if self.worker.isRunning():
+                    self.worker.requestInterruption()
+                    self.worker.wait(5000)
+                self.worker.deleteLater()
+            except Exception:
+                pass
+            self.worker = None
 
     def showEvent(self, event):
         """Called when widget becomes visible"""

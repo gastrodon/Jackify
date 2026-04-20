@@ -90,7 +90,7 @@ class ProgressParser(ProgressParserPhaseMixin, ProgressParserFilesMixin, Progres
         # Alternative format: "[timestamp] StatusText (current/total) - speed [- Xunit remaining]"
         # Example: "[00:00:10] Downloading Mod Archives (17/214) - 6.8MB/s"
         # Example (engine 0.4.8+): "[00:00:10] Downloading Mod Archives (17/214) - 6.8MB/s - 23.1GB remaining"
-        # Timestamp prefix is now optional — engine no longer emits [HH:MM:SS].
+        # Timestamp prefix is now optional - engine no longer emits [HH:MM:SS].
         self.timestamp_status_pattern = re.compile(
             r'(?:\[[^\]]+\]\s+)?(.+?)\s+\((\d+)/(\d+)\)\s*-\s*([^\s]+)(?:\s*-\s*([\d.]+)\s*(B|KB|MB|GB|TB)\s+remaining)?',
             re.IGNORECASE
@@ -157,10 +157,17 @@ class ProgressParser(ProgressParserPhaseMixin, ProgressParserFilesMixin, Progres
             ParsedLine with extracted information
         """
         result = ParsedLine(message=line.strip())
-        
+
         if not line.strip():
             return result
-        
+
+        # Suppress internal engine lines that are not user-facing
+        _suppress_prefixes = (
+            "Refreshing OAuth Token",
+        )
+        if any(line.strip().startswith(p) for p in _suppress_prefixes):
+            return ParsedLine()
+
         # Try to extract phase information
         phase_info = self._extract_phase(line)
         if phase_info:

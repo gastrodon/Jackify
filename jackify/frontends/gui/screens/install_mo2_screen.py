@@ -13,7 +13,7 @@ from typing import Optional
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFileDialog, QLineEdit, QGridLayout, QTextEdit, QCheckBox,
+    QLineEdit, QGridLayout, QTextEdit, QCheckBox,
     QMessageBox, QSizePolicy,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize
@@ -25,7 +25,7 @@ from jackify.shared.progress_models import FileProgress, OperationType
 from ..dialogs.existing_setup_dialog import prompt_existing_setup_dialog
 from ..services.message_service import MessageService
 from ..shared_theme import JACKIFY_COLOR_BLUE, DEBUG_BORDERS
-from ..utils import set_responsive_minimum
+from ..utils import set_responsive_minimum, browse_directory
 from .screen_focus_reclaim import FocusReclaimMixin, STEAM_RESTART_SENTINEL
 from ..widgets.progress_indicator import OverallProgressIndicator
 from ..widgets.file_progress_list import FileProgressList
@@ -303,11 +303,9 @@ class InstallMO2Screen(ScreenBackMixin, FocusReclaimMixin, QWidget):
             self.resize_request.emit("compact")
 
     def _browse_folder(self):
-        folder = QFileDialog.getExistingDirectory(
-            self, "Select MO2 Installation Folder", str(Path.home()), QFileDialog.ShowDirsOnly
-        )
+        folder = browse_directory(self, "Select MO2 Installation Folder", str(Path.home()))
         if folder:
-            self.install_dir_edit.setText(os.path.realpath(folder))
+            self.install_dir_edit.setText(folder)
 
     # ------------------------------------------------------------------
     # Activity window helpers
@@ -511,9 +509,7 @@ class InstallMO2Screen(ScreenBackMixin, FocusReclaimMixin, QWidget):
             try:
                 if self.worker.isRunning():
                     self.worker.requestInterruption()
-                    if not self.worker.wait(5000):
-                        self.worker.terminate()
-                        self.worker.wait(10000)
+                    self.worker.wait(10000)
                 self.worker.deleteLater()
             except Exception:
                 pass

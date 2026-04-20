@@ -84,21 +84,26 @@ class ConfigureNewModlistDialogsMixin:
         except Exception:
             pass
 
+    def hideEvent(self, event):
+        if getattr(self, '_vnv_controller', None) is not None:
+            try:
+                self._vnv_controller.cleanup()
+            except Exception:
+                pass
+        super().hideEvent(event)
+
     def cleanup_processes(self):
         """Clean up any running processes when the window closes or is cancelled"""
+        if getattr(self, '_vnv_controller', None) is not None:
+            try:
+                self._vnv_controller.cleanup()
+                self._vnv_controller = None
+            except Exception:
+                pass
         self._stop_focus_reclaim()
         if hasattr(self, 'file_progress_list'):
             self.file_progress_list.stop_cpu_tracking()
-
-        from PySide6.QtCore import QThread
-        for attr_name, value in list(vars(self).items()):
-            try:
-                if isinstance(value, QThread) and value.isRunning():
-                    value.terminate()
-                    value.wait(2000)
-                    setattr(self, attr_name, None)
-            except Exception:
-                pass
+        self._park_all_threads()
 
     def show_shortcut_conflict_dialog(self, conflicts):
         """Show dialog to reuse an existing shortcut or choose a new name."""
@@ -148,6 +153,12 @@ class ConfigureNewModlistDialogsMixin:
                 self._restore_controls_after_shortcut_dialog_abort()
                 return
             self._safe_append_text(f"Reusing existing Steam shortcut '{existing_name}'.")
+            try:
+                from jackify.backend.handlers.modlist_handler import ModlistHandler
+                _game_type = self._detect_game_type_from_mo2_ini(install_dir)
+                ModlistHandler().set_steam_grid_images(str(existing_appid), install_dir, game_type=_game_type)
+            except Exception as _e:
+                logger.warning("Failed to apply Steam artwork on shortcut reuse: %s", _e)
             self.continue_configuration_after_automated_prefix(
                 str(existing_appid),
                 existing_name,

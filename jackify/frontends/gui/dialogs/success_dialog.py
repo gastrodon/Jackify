@@ -92,6 +92,8 @@ class SuccessDialog(QDialog):
             suffix_text = "configured successfully!"
         elif self.workflow_type == "configure_existing":
             suffix_text = "configuration updated successfully!"
+        elif self.workflow_type == "tool_config":
+            suffix_text = "tool compatibility configured successfully!"
         else:
             # Fallback for other workflow types
             message_text = self._build_success_message()
@@ -118,18 +120,19 @@ class SuccessDialog(QDialog):
         # Ensure the label uses full width of the card before wrapping
         card_layout.addWidget(message_label)
 
-        # Time taken
-        time_label = QLabel(f"Completed in {self.time_taken}")
-        time_label.setAlignment(Qt.AlignCenter)
-        time_label.setStyleSheet(
-            "QLabel { "
-            "  font-size: 12px; "
-            "  color: #b0b0b0; "
-            "  font-style: italic; "
-            "  margin-bottom: 10px; "
-            "}"
-        )
-        card_layout.addWidget(time_label)
+        # Time taken (omit label if time is not available)
+        if self.time_taken:
+            time_label = QLabel(f"Completed in {self.time_taken}")
+            time_label.setAlignment(Qt.AlignCenter)
+            time_label.setStyleSheet(
+                "QLabel { "
+                "  font-size: 12px; "
+                "  color: #b0b0b0; "
+                "  font-style: italic; "
+                "  margin-bottom: 10px; "
+                "}"
+            )
+            card_layout.addWidget(time_label)
 
         # Next steps guidance
         next_steps_text = self._build_next_steps()
@@ -240,15 +243,37 @@ class SuccessDialog(QDialog):
         game_display = self.game_name or self.modlist_name
 
         base_message = ""
-        if self.workflow_type == "tuxborn":
+        if self.workflow_type == "tool_config":
+            base_message = (
+                f"Modding tools for {self.modlist_name} are now configured. "
+                "xEdit, Synthesis, Pandora, and DLL overrides are ready to use from within Mod Organizer 2."
+            )
+        elif self.workflow_type == "tuxborn":
             base_message = f"You can now launch Tuxborn from Steam and enjoy your modded {game_display} experience!"
         elif self.workflow_type == "install" and self.modlist_name == "Wabbajack":
             base_message = "You can now launch Wabbajack from Steam and install modlists. Once the modlist install is complete, you can run \"Configure New Modlist\" in Jackify to complete the configuration for running the modlist on Linux."
         else:
-            base_message = f"You can now launch {self.modlist_name} from Steam and enjoy your modded {game_display} experience!"
+            try:
+                from jackify.backend.handlers.config_handler import ConfigHandler
+                auto_tool_compat = ConfigHandler().get('auto_tool_compat', True)
+            except Exception:
+                auto_tool_compat = True
+
+            tool_hint = (
+                "<br><br>"
+                "<span style=\"color:#b0b0b0; font-size:12px;\">"
+                "If you use modding tools such as xEdit, Synthesis, or Pandora, "
+                "run <b>Configure Tool Compatibility</b> from the Additional Tasks menu."
+                "</span>"
+            ) if not auto_tool_compat else ""
+
+            base_message = (
+                f"You can now launch {self.modlist_name} from Steam and enjoy your modded {game_display} experience!"
+                f"{tool_hint}"
+            )
 
         # ENB Proton warning shown in separate dialog
-        return base_message 
+        return base_message
 
     def _update_countdown(self):
         if self._countdown > 0:

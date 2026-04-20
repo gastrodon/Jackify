@@ -159,14 +159,17 @@ class ModlistInstallCLIConfigurationMixin:
                 self.logger.info(f"Using machineid: {machineid}")
             cmd += ['-o', install_dir_str, '-d', download_dir_str]
 
+            writeback_path = str(auth_service.get_token_writeback_path())
             # Store original environment values to restore later
             original_env_values = {
                 'NEXUS_API_KEY': os.environ.get('NEXUS_API_KEY'),
                 'NEXUS_OAUTH_INFO': os.environ.get('NEXUS_OAUTH_INFO'),
+                'JACKIFY_TOKEN_WRITEBACK': os.environ.get('JACKIFY_TOKEN_WRITEBACK'),
                 'DOTNET_SYSTEM_GLOBALIZATION_INVARIANT': os.environ.get('DOTNET_SYSTEM_GLOBALIZATION_INVARIANT')
             }
 
             try:
+                os.environ['JACKIFY_TOKEN_WRITEBACK'] = writeback_path
                 # Temporarily modify current process's environment
                 # Prefer NEXUS_OAUTH_INFO (supports auto-refresh) over NEXUS_API_KEY (legacy)
                 if oauth_info:
@@ -341,7 +344,8 @@ class ModlistInstallCLIConfigurationMixin:
                         print()
                     
                     proc.wait()
-                    
+                    auth_service.apply_token_writeback(writeback_path)
+
                 finally:
                     # Stop performance monitoring and get summary
                     if monitoring_started:

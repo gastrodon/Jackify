@@ -209,7 +209,6 @@ class InstallModlistCommand:
             'modlist_value': getattr(args, 'modlist_value', None),
             'skip_confirmation': True,
             'resolution': getattr(args, 'resolution', None),
-            'skip_disk_check': getattr(args, 'skip_disk_check', False),
         }
     
     def _validate_install_context(self, context: dict) -> bool:
@@ -317,16 +316,21 @@ class InstallModlistCommand:
         
         # Check if game is supported
         if game_type and not modlist_cli.check_game_support(game_type):
-            # Show unsupported game warning
             supported_games = modlist_cli.wabbajack_parser.get_supported_games_display_names()
             supported_games_str = ", ".join(supported_games)
-            
             print(f"\n{COLOR_WARNING}Game Support Notice{COLOR_RESET}")
             print(f"{COLOR_WARNING}While any modlist can be downloaded with Jackify, the post-install configuration can only be automatically applied to: {supported_games_str}.{COLOR_RESET}")
             print(f"{COLOR_WARNING}We are working to add more automated support in future releases!{COLOR_RESET}")
-            
-            # Ask for confirmation to continue
-            response = input(f"{COLOR_PROMPT}Click Enter to continue with the modlist installation, or type 'cancel' to abort: {COLOR_RESET}").strip().lower()
+            response = input(f"{COLOR_PROMPT}Press Enter to continue, or type 'cancel' to abort: {COLOR_RESET}").strip().lower()
+            if response == 'cancel':
+                print("[INFO] Modlist installation cancelled by user.")
+                return 1
+        elif game_type in ('skyrimvr', 'fallout4vr'):
+            game_label = "Skyrim VR" if game_type == 'skyrimvr' else "Fallout 4 VR"
+            print(f"\n{COLOR_WARNING}VR Platform Notice{COLOR_RESET}")
+            print(f"{COLOR_WARNING}{game_label} modlist detected. Jackify will handle the install and prefix setup, but running VR modlists on Linux requires a working VR platform (SteamVR, ALVR, WiVRn, etc.) configured independently.{COLOR_RESET}")
+            print(f"{COLOR_WARNING}VR support is best effort. Full functionality depends on your VR setup.{COLOR_RESET}")
+            response = input(f"{COLOR_PROMPT}Press Enter to continue, or type 'cancel' to abort: {COLOR_RESET}").strip().lower()
             if response == 'cancel':
                 print("[INFO] Modlist installation cancelled by user.")
                 return 1

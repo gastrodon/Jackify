@@ -180,5 +180,6 @@ class PathHandlerGameMixin:
             self.stock_game_path = found_path
             return True
         self.stock_game_path = None
-        self.logger.info("No common Stock Game/Game Root directory found. Will assume vanilla game path is needed for some operations.")
+        searched = [str(modlist_path / n) for n in preferred_order]
+        self.logger.info(f"No common Stock Game/Game Root directory found (searched: {searched}). Will assume vanilla game path is needed for some operations.")
         return True

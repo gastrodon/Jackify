@@ -103,10 +103,22 @@ class ModlistService(ModlistServiceInstallationMixin):
                     
                 elif game_type_lower == 'enderal':
                     raw_modlists = [m for m in raw_modlists if 'enderal' in m.get('game', '').lower()]
-                    
+
+                elif game_type_lower == 'skyrimvr':
+                    raw_modlists = [m for m in raw_modlists if 'skyrim vr' in m.get('game', '').lower()]
+
+                elif game_type_lower == 'fallout4vr':
+                    raw_modlists = [m for m in raw_modlists if 'fallout 4 vr' in m.get('game', '').lower()]
+
+                elif game_type_lower == 'cp2077':
+                    raw_modlists = [m for m in raw_modlists if 'cyberpunk' in m.get('game', '').lower()]
+
+                elif game_type_lower == 'bg3':
+                    raw_modlists = [m for m in raw_modlists if "baldur" in m.get('game', '').lower()]
+
                 elif game_type_lower == 'other':
                     # Exclude all main category games to show only "Other" games
-                    main_category_keywords = ['skyrim', 'fallout 4', 'fallout new vegas', 'oblivion', 'starfield', 'enderal']
+                    main_category_keywords = ['skyrim', 'fallout 4', 'fallout new vegas', 'oblivion', 'starfield', 'enderal', 'cyberpunk', "baldur's gate", 'skyrim vr', 'fallout 4 vr']
                     def is_main_category(game_name):
                         game_lower = game_name.lower()
                         return any(keyword in game_lower for keyword in main_category_keywords)

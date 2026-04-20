@@ -136,7 +136,7 @@ def _logs_dir_display() -> str:
 
 # ---------------------------------------------------------------------------
 # Factory functions for known failure modes.
-# No GUI imports allowed here — backend code raises these directly.
+# No GUI imports allowed here - backend code raises these directly.
 # ---------------------------------------------------------------------------
 
 def steam_still_running() -> SteamError:
@@ -280,8 +280,8 @@ def ttw_install_failed(detail: str) -> TTWError:
         solutions=[
             "Confirm vanilla Fallout 3 and Fallout New Vegas are both installed and launch correctly.",
             "If either game was previously modded, restore a clean vanilla install before retrying TTW.",
-            "Ensure TTW_Linux_Installer is installed — use 'Install TTW Installer' in Additional Tasks.",
-            "Check available disk space — TTW requires ~15GB free.",
+            "Ensure TTW_Linux_Installer is installed - use 'Install TTW Installer' in Additional Tasks.",
+            "Check available disk space - TTW requires ~15GB free.",
             "Verify the TTW .mpi file is not corrupted (try re-downloading it).",
             f"Check Jackify logs ({_logs_dir_display()}) and TTW_Install_workflow.log for the specific failure.",
             f"If this still fails, open a GitHub issue and include logs from {_logs_dir_display()}.",
@@ -296,10 +296,10 @@ def wabbajack_install_failed(detail: str, context: Optional[dict] = None) -> Ins
         message="The modlist installation did not complete successfully.",
         suggestion=f"Check the console output and Jackify logs ({_logs_dir_display()}) for the failure reason.",
         solutions=[
-            "Ensure you are logged in to Nexus Mods — check Settings > OAuth.",
+            "Ensure you are logged in to Nexus Mods - check Settings > OAuth.",
             "Confirm your Nexus account has Premium access for automated downloads.",
             "Check available disk space on both the install and download drives.",
-            "Re-run the install — Wabbajack resumes from where it stopped.",
+            "Re-run the install - Wabbajack resumes from where it stopped.",
             "If a specific file failed repeatedly, try downloading it manually from Nexus.",
             "Check Modlist_Install_workflow.log for the specific file that failed.",
             "If the same failure repeats with no clear workaround, open a GitHub issue with logs.",
@@ -333,7 +333,7 @@ def install_dir_create_failed(path: str, detail: str) -> InstallError:
             "Confirm the target drive is mounted and writable.",
             "Check available disk space: df -h",
             "Try creating the folder manually first, then retry.",
-            "On Steam Deck, avoid paths under /usr or /var — use /home/deck or an SD card.",
+            "On Steam Deck, avoid paths under /usr or /var - use /home/deck or an SD card.",
         ],
         technical=format_technical_context(detail=detail, context={"path": path}),
     )
@@ -368,7 +368,7 @@ def cc_content_missing(filename: str = "") -> InstallError:
             "From the Skyrim main menu, go into Creations and select 'Download All'.",
             "If specific files are still missing, search for and download them individually from the Creations menu.",
             "If problems persist, uninstall and reinstall Skyrim, then launch once to trigger the AE download.",
-            "Note: Skyrim AE via Steam Family Sharing does not transfer DLC content — you must own AE directly.",
+            "Note: Skyrim AE via Steam Family Sharing does not transfer DLC content - you must own AE directly.",
         ],
         technical=format_technical_context(detail=detail) if detail else None,
     )
@@ -386,9 +386,9 @@ def creation_kit_missing() -> InstallError:
             "In Steam, search for 'Skyrim Special Edition: Creation Kit' and install it.",
             "Right-click it in Steam > Properties > Compatibility and set a Proton version.",
             "Click Play to launch the Creation Kit.",
-            "When asked whether to unzip Scripts.zip, select NO — unzipping will cause the CK to crash.",
+            "When asked whether to unzip Scripts.zip, select NO - unzipping will cause the CK to crash.",
             "Once the Creation Kit opens successfully, close it.",
-            "Re-run the modlist install in Jackify — the required files will now be in place.",
+            "Re-run the modlist install in Jackify - the required files will now be in place.",
         ],
     )
 
@@ -399,7 +399,7 @@ def mo2_setup_failed(detail: str) -> InstallError:
         message="Jackify could not complete the Mod Organizer 2 setup.",
         suggestion=f"Check Jackify logs ({_logs_dir_display()}) for the specific failure.",
         solutions=[
-            "Ensure you have an active internet connection — MO2 is downloaded from GitHub.",
+            "Ensure you have an active internet connection - MO2 is downloaded from GitHub.",
             "Check available disk space in the install directory.",
             "Try selecting a different install directory with full write permissions.",
             "If the download failed, check GitHub is accessible (try opening it in a browser).",
@@ -423,10 +423,10 @@ _PATTERNS: List[tuple] = [
     ("no such file or directory.*compatdata", lambda d: proton_not_found()),
     ("proton.*not found|no proton",         lambda d: proton_not_found()),
     ("vdf.*error|binary_vdf|invalid vdf",   lambda d: SteamError("Steam VDF File Error", "A Steam configuration file (VDF) could not be read or written.", suggestion="Ensure Steam is closed and try again.", solutions=["Close Steam completely before retrying.", "Restart Steam and retry the same action.", f"Check Jackify logs ({_logs_dir_display()}) for the specific VDF path.", f"If this still fails, open a GitHub issue and include logs from {_logs_dir_display()}."], technical=format_technical_context(detail=d))),
-    ("connection.*refused|connection.*timed out|network.*unreachable", lambda d: InstallError("Network Error", "Jackify could not reach a required network resource.", suggestion="Check your internet connection and retry.", solutions=["Verify your internet connection is active.", "Check if Nexus Mods is reachable at nexusmods.com.", "Disable VPN or proxy if active.", "Retry — transient network errors often resolve on the second attempt."], technical=format_technical_context(detail=d))),
+    ("connection.*refused|connection.*timed out|network.*unreachable", lambda d: InstallError("Network Error", "Jackify could not reach a required network resource.", suggestion="Check your internet connection and retry.", solutions=["Verify your internet connection is active.", "Check if Nexus Mods is reachable at nexusmods.com.", "Disable VPN or proxy if active.", "Retry - transient network errors often resolve on the second attempt."], technical=format_technical_context(detail=d))),
     ("401|unauthorized|forbidden.*nexus",   lambda d: oauth_expired()),
-    ("7z.*error|bad archive|cannot open.*archive", lambda d: InstallError("Archive Error", "A downloaded archive file is corrupted or unreadable.", suggestion="Delete the corrupted file and re-run the install to re-download it.", solutions=["Re-run the install — Wabbajack will re-download files that fail verification.", "Check available disk space (partial downloads look corrupt).", "Check Modlist_Install_workflow.log for the specific file name."], technical=format_technical_context(detail=d))),
-    ("timeout",                             lambda d: SteamError("Operation Timed Out", "An operation took longer than expected and was stopped.", suggestion="Retry — timeouts are often transient.", solutions=["Retry the operation.", "If Steam is slow to start, give it more time before retrying.", "Check system load: close other applications.", f"Check Jackify logs ({_logs_dir_display()}) for which step timed out."], technical=format_technical_context(detail=d))),
+    ("7z.*error|bad archive|cannot open.*archive", lambda d: InstallError("Archive Error", "A downloaded archive file is corrupted or unreadable.", suggestion="Delete the corrupted file and re-run the install to re-download it.", solutions=["Re-run the install - Wabbajack will re-download files that fail verification.", "Check available disk space (partial downloads look corrupt).", "Check Modlist_Install_workflow.log for the specific file name."], technical=format_technical_context(detail=d))),
+    ("timeout",                             lambda d: SteamError("Operation Timed Out", "An operation took longer than expected and was stopped.", suggestion="Retry - timeouts are often transient.", solutions=["Retry the operation.", "If Steam is slow to start, give it more time before retrying.", "Check system load: close other applications.", f"Check Jackify logs ({_logs_dir_display()}) for which step timed out."], technical=format_technical_context(detail=d))),
 ]
 
 

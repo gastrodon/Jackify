@@ -165,6 +165,8 @@ class InstallWorkflowExecutionMixin:
             # Handle resolution saving
             resolution = self.resolution_combo.currentText()
             if resolution and resolution != "Leave unchanged":
+                raw_resolution = resolution.split(" (")[0] if " (" in resolution else resolution
+                self._current_resolution = raw_resolution
                 success = self.resolution_service.save_resolution(resolution)
                 if success:
                     logger.debug(f"DEBUG: Resolution saved successfully: {resolution}")
@@ -185,9 +187,11 @@ class InstallWorkflowExecutionMixin:
             game_type = None
             game_name = None
             
+            readme_url = None
             if install_mode == 'file':
                 # Parse .wabbajack file to get game type
                 wabbajack_path = Path(modlist)
+                readme_url = self.wabbajack_parser.parse_wabbajack_readme(wabbajack_path)
                 result = self.wabbajack_parser.parse_wabbajack_game_type(wabbajack_path)
                 if result:
                     if isinstance(result, tuple):
@@ -221,6 +225,7 @@ class InstallWorkflowExecutionMixin:
             else:
                 # For online modlists, try to get game type from selected modlist
                 if hasattr(self, 'selected_modlist_info') and self.selected_modlist_info:
+                    readme_url = self.selected_modlist_info.get('readme_url')
                     game_name = self.selected_modlist_info.get('game', '')
                     logger.debug(f"DEBUG: Detected game_name from selected_modlist_info: '{game_name}'")
                     
@@ -233,8 +238,13 @@ class InstallWorkflowExecutionMixin:
                         'oblivion': 'oblivion',
                         'starfield': 'starfield',
                         'oblivion_remastered': 'oblivion_remastered',
+                        'oblivion remastered': 'oblivion_remastered',
                         'enderal': 'enderal',
-                        'enderal special edition': 'enderal'
+                        'enderal special edition': 'enderal',
+                        'skyrim vr': 'skyrimvr',
+                        'fallout 4 vr': 'fallout4vr',
+                        'cyberpunk 2077': 'cp2077',
+                        "baldur's gate 3": 'bg3',
                     }
                     game_type = game_mapping.get(game_name.lower())
                     logger.debug(f"DEBUG: Mapped game_name '{game_name}' to game_type: '{game_type}'")
@@ -257,10 +267,14 @@ class InstallWorkflowExecutionMixin:
             
             if game_type and not is_supported:
                 logger.debug(f"DEBUG: Game '{game_type}' is not supported, showing dialog")
-                # Show unsupported game dialog
                 from ..widgets.unsupported_game_dialog import UnsupportedGameDialog
                 dialog = UnsupportedGameDialog(self, game_name)
                 if not dialog.show_dialog(self, game_name):
+                    self._abort_install_validation()
+                    return
+            elif game_type in ('skyrimvr', 'fallout4vr'):
+                from ..widgets.unsupported_game_dialog import UnsupportedGameDialog
+                if not UnsupportedGameDialog.show_dialog(self, game_name, vr_warning=True):
                     self._abort_install_validation()
                     return
             
@@ -372,6 +386,20 @@ class InstallWorkflowExecutionMixin:
                     )
                     return
             
+            if readme_url:
+                import subprocess
+                if "raw.githubusercontent.com" in readme_url:
+                    readme_url = readme_url.replace("raw.githubusercontent.com", "github.com")
+                    readme_url = readme_url.replace("/main/", "/blob/main/")
+                    readme_url = readme_url.replace("/master/", "/blob/master/")
+                logger.info(f"Opening modlist readme: {readme_url}")
+                clean_env = {k: v for k, v in os.environ.items() if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD")}
+                subprocess.Popen(["xdg-open", readme_url], env=clean_env)
+                self._safe_append_text(
+                    "Modlist readme opened in your browser. "
+                    "Check it for any manual post-install steps before launching the game."
+                )
+
             logger.debug(f'DEBUG: Calling run_modlist_installer with modlist={modlist}, install_dir={install_dir}, downloads_dir={downloads_dir}, install_mode={install_mode}')
             self.run_modlist_installer(modlist, install_dir, downloads_dir, api_key, install_mode, oauth_info)
         except Exception as e:
@@ -384,7 +412,7 @@ class InstallWorkflowExecutionMixin:
             self.cancel_install_btn.setVisible(False)
             logger.debug(f"DEBUG: Controls re-enabled in exception handler")
 
-    def run_modlist_installer(self, modlist, install_dir, downloads_dir, api_key, install_mode='online', oauth_info=None, skip_disk_check=False):
+    def run_modlist_installer(self, modlist, install_dir, downloads_dir, api_key, install_mode='online', oauth_info=None):
         logger.debug('DEBUG: run_modlist_installer called - USING THREADED BACKEND WRAPPER')
         
         # Rotate log file at start of each workflow run (keep 5 backups)
@@ -409,7 +437,6 @@ class InstallWorkflowExecutionMixin:
             progress_state_manager=self.progress_state_manager,  # R&D: Pass progress state manager
             auth_service=self.auth_service,  # Fix Issue #127: Pass auth_service for Premium detection diagnostics
             oauth_info=oauth_info,  # Pass OAuth state for auto-refresh
-            skip_disk_check=skip_disk_check,
         )
         self.install_thread.output_received.connect(self.on_installation_output)
         self.install_thread.progress_received.connect(self.on_installation_progress)
@@ -473,7 +500,7 @@ class InstallWorkflowExecutionMixin:
 
         self._safe_append_text(
             f"\n[Manual Download Required] {count} file(s) need manual download.\n"
-            f"Opening download dialog — check your taskbar if it does not appear in front.\n"
+            f"Opening download dialog - check your taskbar if it does not appear in front.\n"
         )
         logger.info(
             f"[MDL-1006] Manual download protocol initialized | count={count} "

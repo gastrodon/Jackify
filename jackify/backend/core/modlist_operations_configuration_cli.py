@@ -121,17 +121,16 @@ class ModlistOperationsConfigurationCLIMixin:
             if debug_mode:
                 cmd.append('--debug')
                 self.logger.info("Adding --debug flag to jackify-engine")
-            if self.context.get('skip_disk_check'):
-                cmd.append('--skip-disk-check')
-                self.logger.info("Adding --skip-disk-check flag to jackify-engine")
-
+            writeback_path = str(auth_service.get_token_writeback_path())
             original_env_values = {
                 'NEXUS_API_KEY': os.environ.get('NEXUS_API_KEY'),
                 'NEXUS_OAUTH_INFO': os.environ.get('NEXUS_OAUTH_INFO'),
+                'JACKIFY_TOKEN_WRITEBACK': os.environ.get('JACKIFY_TOKEN_WRITEBACK'),
                 'DOTNET_SYSTEM_GLOBALIZATION_INVARIANT': os.environ.get('DOTNET_SYSTEM_GLOBALIZATION_INVARIANT')
             }
 
             try:
+                os.environ['JACKIFY_TOKEN_WRITEBACK'] = writeback_path
                 if oauth_info:
                     os.environ['NEXUS_OAUTH_INFO'] = oauth_info
                     from jackify.backend.services.nexus_oauth_service import NexusOAuthService
@@ -283,6 +282,7 @@ class ModlistOperationsConfigurationCLIMixin:
 
                 proc.wait()
                 self._current_process = None
+                auth_service.apply_token_writeback(writeback_path)
                 if proc.returncode != 0:
                     print(f"{COLOR_ERROR}Jackify Install Engine exited with code {proc.returncode}.{COLOR_RESET}")
                     self.logger.error(f"Engine exited with code {proc.returncode}.")
@@ -595,6 +595,36 @@ class ModlistOperationsConfigurationCLIMixin:
                 if update_existing_install and app_id:
                     print(f"{COLOR_SUCCESS}Update mode Steam setup confirmed.{COLOR_RESET}")
                     print(f"{COLOR_INFO}Reusing Steam AppID: {app_id}{COLOR_RESET}")
+                    # Apply artwork and restart Steam -- skipped in update path since the full
+                    # workflow is bypassed, but artwork and Steam state still need refreshing.
+                    _game_type = self.context.get('detected_game') or self.context.get('special_game_type')
+                    try:
+                        from jackify.backend.handlers.modlist_handler import ModlistHandler
+                        ModlistHandler().set_steam_grid_images(str(app_id), install_dir_str, game_type=_game_type)
+                    except Exception as e:
+                        self.logger.warning("Failed to apply Steam artwork in update mode: %s", e)
+                    if _game_type == 'cp2077':
+                        # CP2077 launch options may be absent on lists originally installed
+                        # under v0.5 before CP2077 support was added.
+                        try:
+                            from jackify.backend.handlers.shortcut_handler import ShortcutHandler
+                            from jackify.backend.handlers.config_handler import ConfigHandler
+                            sh = ShortcutHandler(
+                                config_handler=ConfigHandler(),
+                                steamdeck=bool(self.system_info and self.system_info.is_steamdeck),
+                            )
+                            sh.update_shortcut_launch_options(
+                                shortcut_name,
+                                mo2_exe_path,
+                                'WINEDLLOVERRIDES="version=n,b;winmm=n,b" %command%',
+                            )
+                        except Exception as e:
+                            self.logger.warning("Failed to update CP2077 launch options in update mode: %s", e)
+                    try:
+                        from jackify.backend.services.automated_prefix_service import AutomatedPrefixService
+                        AutomatedPrefixService(self.system_info).restart_steam()
+                    except Exception as e:
+                        self.logger.warning("Failed to restart Steam in update mode: %s", e)
                 else:
                     print(f"{COLOR_SUCCESS}Automated Steam setup completed successfully!{COLOR_RESET}")
                     if prefix_path:

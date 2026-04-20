@@ -251,6 +251,24 @@ class ConfigureNewModlistWorkflowMixin:
             logger.error("Error handling automated prefix result: %s", e)
             self._safe_append_text(f"Error handling automated prefix result: {str(e)}")
             self.start_btn.setEnabled(True)
+        finally:
+            self._cleanup_automated_prefix_thread()
+
+    def _cleanup_automated_prefix_thread(self):
+        """Safely release the automated prefix thread after it has finished."""
+        if not hasattr(self, 'automated_prefix_thread') or self.automated_prefix_thread is None:
+            return
+        try:
+            self.automated_prefix_thread.progress_update.disconnect()
+            self.automated_prefix_thread.workflow_complete.disconnect()
+            self.automated_prefix_thread.error_occurred.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        if self.automated_prefix_thread.isRunning():
+            self.automated_prefix_thread.quit()
+            self.automated_prefix_thread.wait(5000)
+        self.automated_prefix_thread.deleteLater()
+        self.automated_prefix_thread = None
 
     def _on_automated_prefix_error(self, error):
         """Handle error from the automated prefix workflow"""
@@ -261,8 +279,8 @@ class ConfigureNewModlistWorkflowMixin:
         logger.error(f"Automated prefix error: {error.message}")
         self._safe_append_text(f"[FAILED] {error.message}")
         MessageService.show_error(self, error)
-        
         self._enable_controls_after_operation()
+        self._cleanup_automated_prefix_thread()
 
     def continue_configuration_after_automated_prefix(self, new_appid, modlist_name, install_dir, last_timestamp=None):
         """Continue the configuration process with the new AppID after automated prefix creation"""
@@ -327,7 +345,7 @@ class ConfigureNewModlistWorkflowMixin:
                         modlist_context = ModlistContext(
                             name=self.context['name'],
                             install_dir=Path(self.context['path']),
-                            download_dir=Path(self.context['path']).parent / 'Downloads',  # Default
+                            download_dir=None,
                             game_type=detected_game_type,
                             nexus_api_key='',  # Not needed for configuration
                             modlist_value=self.context.get('modlist_value'),
@@ -434,7 +452,7 @@ class ConfigureNewModlistWorkflowMixin:
                         modlist_context = ModlistContext(
                             name=self.context['name'],
                             install_dir=Path(self.context['path']),
-                            download_dir=Path(self.context['path']).parent / 'Downloads',  # Default
+                            download_dir=None,
                             game_type=detected_game_type,
                             nexus_api_key='',  # Not needed for configuration
                             modlist_value='',  # Not needed for existing modlist

@@ -18,7 +18,11 @@ class GameDetector:
             'fallout3': ['Fallout 3'],
             'oblivion': ['Oblivion'],
             'starfield': ['Starfield'],
-            'oblivion_remastered': ['Oblivion Remastered']
+            'oblivion_remastered': ['Oblivion Remastered'],
+            'skyrimvr': ['Skyrim VR'],
+            'fallout4vr': ['Fallout 4 VR'],
+            'cp2077': ['Cyberpunk 2077'],
+            'bg3': ["Baldur's Gate 3"],
         }
         
     def detect_game_type(self, modlist_name: str) -> Optional[str]:
@@ -26,9 +30,17 @@ class GameDetector:
         modlist_lower = modlist_name.lower()
         
         # Check for game-specific keywords in modlist name
-        # Check for Oblivion Remastered first since "oblivion" is a substring
+        # Check more specific types before their generic parents
         if any(keyword in modlist_lower for keyword in ['oblivion remastered', 'oblivionremastered', 'oblivion_remastered']):
             return 'oblivion_remastered'
+        elif any(keyword in modlist_lower for keyword in ['skyrim vr', 'skyrimvr']):
+            return 'skyrimvr'
+        elif any(keyword in modlist_lower for keyword in ['fallout 4 vr', 'fallout4vr', 'fo4vr']):
+            return 'fallout4vr'
+        elif any(keyword in modlist_lower for keyword in ['cyberpunk', 'cp2077', 'cyberpunk 2077']):
+            return 'cp2077'
+        elif any(keyword in modlist_lower for keyword in ["baldur's gate 3", 'baldursgate3', 'bg3']):
+            return 'bg3'
         elif any(keyword in modlist_lower for keyword in ['skyrim', 'sse', 'skse', 'dragonborn', 'dawnguard']):
             return 'skyrim'
         elif any(keyword in modlist_lower for keyword in ['fallout 4', 'fo4', 'f4se', 'commonwealth']):
@@ -134,9 +146,37 @@ class GameDetector:
                 'min_proton_version': '8.0',
                 'required_dlc': [],
                 'compatibility_tools': ['protontricks', 'winetricks']
-            }
+            },
+            'skyrimvr': {
+                'launcher': 'SKSE',
+                'min_proton_version': '6.0',
+                'required_dlc': [],
+                'compatibility_tools': ['protontricks', 'winetricks'],
+                'notes': 'SteamVR must be installed separately',
+            },
+            'fallout4vr': {
+                'launcher': 'F4SE',
+                'min_proton_version': '6.0',
+                'required_dlc': [],
+                'compatibility_tools': ['protontricks', 'winetricks'],
+                'notes': 'SteamVR must be installed separately',
+            },
+            'cp2077': {
+                'launcher': 'redmod',
+                'min_proton_version': '8.0',
+                'required_dlc': [],
+                'compatibility_tools': ['protontricks', 'winetricks'],
+                'notes': 'Requires WINEDLLOVERRIDES=version=n,b;winmm=n,b for Red4ext/CET. Rootbuilder must use COPY mode.',
+            },
+            'bg3': {
+                'launcher': 'bg3_dx11',
+                'min_proton_version': '8.0',
+                'required_dlc': [],
+                'compatibility_tools': ['protontricks', 'winetricks'],
+                'notes': 'Rootbuilder must use COPY mode.',
+            },
         }
-        
+
         return requirements.get(game_type, {})
         
     def detect_mods(self, modlist_path: Path) -> List[Dict]:

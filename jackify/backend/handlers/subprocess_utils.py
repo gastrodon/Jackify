@@ -266,7 +266,7 @@ class ProcessManager:
                         pass
                     cleanup_attempts += 1
         finally:
-            # Always close pipes — unblocks threads blocked on read(1) or iterating stderr
+            # Always close pipes - unblocks threads blocked on read(1) or iterating stderr
             if self.proc:
                 for pipe in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
                     if pipe:

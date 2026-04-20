@@ -170,6 +170,7 @@ class SettingsDialogTabsMixin:
         advanced_layout.addWidget(auth_group)
         advanced_layout.addSpacing(12)
 
+
         self.resource_settings_path = os.path.expanduser("~/.config/jackify/resource_settings.json")
         self.resource_settings = self._load_json(self.resource_settings_path)
         self.resource_edits = {}
@@ -275,6 +276,27 @@ class SettingsDialogTabsMixin:
         self.component_method_group.addButton(self.protontricks_radio, 1)
         component_method_layout.addWidget(self.protontricks_radio)
         component_layout.addLayout(component_method_layout)
+
+        self.auto_tool_compat_checkbox = QCheckBox("Apply tool compatibility settings during install/configure")
+        self.auto_tool_compat_checkbox.setChecked(self.config_handler.get('auto_tool_compat', True))
+        self.auto_tool_compat_checkbox.setToolTip(
+            "Automatically apply Wine registry fixes for xEdit, Pandora, and DLL overrides "
+            "at the end of every install or configure workflow. Disable if you find it adds "
+            "noticeable delay."
+        )
+        self.auto_tool_compat_checkbox.setStyleSheet("color: #fff;")
+        component_layout.addWidget(self.auto_tool_compat_checkbox)
+
+        self.force_github_updates_checkbox = QCheckBox("Use GitHub as update source (bypass Nexus CDN)")
+        self.force_github_updates_checkbox.setChecked(self.config_handler.get('force_github_updates', False))
+        self.force_github_updates_checkbox.setToolTip(
+            "Always download Jackify updates directly from GitHub Releases instead of Nexus CDN. "
+            "Enable this if self-updates fail or stall. GitHub delivers the AppImage directly; "
+            "Nexus delivers a .7z archive that Jackify must extract."
+        )
+        self.force_github_updates_checkbox.setStyleSheet("color: #fff;")
+        component_layout.addWidget(self.force_github_updates_checkbox)
+
         advanced_layout.addWidget(component_group)
         advanced_layout.addStretch()
         self.tab_widget.addTab(advanced_tab, "Advanced")

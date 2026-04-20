@@ -20,23 +20,6 @@ class ProtonOperationsMixin:
             from jackify.backend.handlers.config_handler import ConfigHandler
             from jackify.backend.handlers.wine_utils import WineUtils
 
-            # Check for Lorerim-specific Proton override first
-            modlist_normalized = modlist_name.lower().replace(" ", "") if modlist_name else ""
-            if modlist_normalized == 'lorerim':
-                lorerim_proton = self._get_lorerim_preferred_proton()
-                if lorerim_proton:
-                    logger.info(f"Lorerim detected: Using {lorerim_proton} instead of user settings")
-                    self._store_proton_override_notification("Lorerim", lorerim_proton)
-                    return lorerim_proton
-
-            # Check for Lost Legacy-specific Proton override (needs Proton 9 for ENB compatibility)
-            if modlist_normalized == 'lostlegacy':
-                lostlegacy_proton = self._get_lorerim_preferred_proton()  # Use same logic as Lorerim
-                if lostlegacy_proton:
-                    logger.info(f"Lost Legacy detected: Using {lostlegacy_proton} instead of user settings (ENB compatibility)")
-                    self._store_proton_override_notification("Lost Legacy", lostlegacy_proton)
-                    return lostlegacy_proton
-
             config_handler = ConfigHandler()
             user_proton_path = config_handler.get_game_proton_path()
 

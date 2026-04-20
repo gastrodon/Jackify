@@ -2,7 +2,6 @@
 from pathlib import Path
 import os
 import logging
-import requests
 import re
 from typing import Optional
 
@@ -147,52 +146,14 @@ class ModlistConfigurationMixin:
                 print("───────────────────────────────────────────────────────────────────")
                 input(f"{COLOR_PROMPT}Once you have completed ALL the steps above, press Enter to continue...{COLOR_RESET}")
                 self.logger.info("User confirmed completion of manual steps.")
-        # Step 3: Download and apply curated user.reg.modlist and system.reg.modlist
+        # Step 3: Apply targeted registry tweaks (replaces wholesale curated reg file overwrite)
         if status_callback:
-            status_callback(f"{self._get_progress_timestamp()} Applying curated registry files for modlist configuration")
-        self.logger.info("Step 3: Downloading and applying curated user.reg.modlist and system.reg.modlist...")
+            status_callback(f"{self._get_progress_timestamp()} Applying modlist registry configuration")
+        self.logger.info("Step 3: Applying modlist registry tweaks...")
         try:
-            prefix_path_str = self.path_handler.find_compat_data(str(self.appid))
-            if not prefix_path_str or not os.path.isdir(prefix_path_str):
-                raise Exception("Could not determine Wine prefix path for this modlist. Please ensure you have launched the shortcut from Steam at least once.")
-            user_reg_url = "https://raw.githubusercontent.com/Omni-guides/Wabbajack-Modlist-Linux/refs/heads/main/files/user.reg.modlist"
-            user_reg_dest = Path(prefix_path_str) / "user.reg"
-            response = requests.get(user_reg_url, verify=True)
-            response.raise_for_status()
-            with open(user_reg_dest, "wb") as f:
-                f.write(response.content)
-            self.logger.info(f"Curated user.reg.modlist downloaded and applied to {user_reg_dest}")
-            system_reg_url = "https://raw.githubusercontent.com/Omni-guides/Wabbajack-Modlist-Linux/refs/heads/main/files/system.reg.modlist"
-            system_reg_dest = Path(prefix_path_str) / "system.reg"
-            response = requests.get(system_reg_url, verify=True)
-            response.raise_for_status()
-            with open(system_reg_dest, "wb") as f:
-                f.write(response.content)
-            self.logger.info(f"Curated system.reg.modlist downloaded and applied to {system_reg_dest}")
+            self._apply_modlist_registry_tweaks()
         except Exception as e:
-            self.logger.error(f"Failed to download or apply curated user.reg.modlist or system.reg.modlist: {e}")
-            self.logger.error(f"Failed to download or apply curated user.reg.modlist or system.reg.modlist. {e}")
-            return False
-        self.logger.info("Step 3: Curated user.reg.modlist and system.reg.modlist applied successfully.")
-        # The curated registry files overwrite the entire Wine registry, so any
-        # game-specific entries injected earlier must be re-applied immediately after.
-        special_game_type = self.detect_special_game_type(self.modlist_dir)
-        if special_game_type in ["fnv", "fo3", "enderal"]:
-            self.logger.info(
-                "Re-injecting %s game registry entries after curated registry overwrite",
-                special_game_type.upper(),
-            )
-            try:
-                from jackify.backend.services.automated_prefix_service import AutomatedPrefixService
-                AutomatedPrefixService()._inject_game_registry_entries(prefix_path_str, special_game_type)
-            except Exception as e:
-                self.logger.error(
-                    "Failed to restore %s registry entries after curated registry overwrite: %s",
-                    special_game_type.upper(),
-                    e,
-                )
-                self.logger.error("Could not restore required game registry entries after applying curated registry files.")
-                return False
+            self.logger.warning("Modlist registry tweaks failed (non-fatal): %s", e)
 
         # Step 4: Install Wine Components
         if status_callback:
@@ -258,18 +219,12 @@ class ModlistConfigurationMixin:
                 status_callback(f"{self._get_progress_timestamp()} {failure_msg}")
             # Continue but user should be aware of potential issues
 
-        # Step 4.6: Enable dotfiles visibility for Wine prefix
-        if status_callback:
-            status_callback(f"{self._get_progress_timestamp()} Enabling dotfiles visibility")
-        self.logger.info("Step 4.6: Enabling dotfiles visibility in Wine prefix...")
+        # Step 4.6: Audit final registry state - confirms all writes survived winetricks
+        self.logger.info("Step 4.6: Auditing registry state...")
         try:
-            if self.protontricks_handler.enable_dotfiles(self.appid):
-                self.logger.info("Dotfiles visibility enabled successfully")
-            else:
-                self.logger.warning("Failed to enable dotfiles visibility (non-critical, continuing)")
+            self._audit_registry_state()
         except Exception as e:
-            self.logger.warning(f"Error enabling dotfiles visibility: {e} (non-critical, continuing)")
-        self.logger.info("Step 4.6: Enabling dotfiles visibility... Done")
+            self.logger.warning("Registry audit failed (non-fatal): %s", e)
 
         # Step 4.7: Create Wine prefix Documents directories for USVFS
         # Critical for USVFS profile INI virtualization on first launch
@@ -277,17 +232,40 @@ class ModlistConfigurationMixin:
             status_callback(f"{self._get_progress_timestamp()} Creating Wine prefix Documents directories for USVFS")
         self.logger.info("Step 4.7: Creating Wine prefix Documents directories for USVFS...")
         try:
-            if self.appid and self.game_var:
-                # Map game_var to game_name for create_required_dirs
+            if self.appid:
+                # Map detected game type to the key expected by create_required_dirs
                 game_name_map = {
+                    "skyrim": "skyrimse",
                     "skyrimspecialedition": "skyrimse",
+                    "skyrimvr": "skyrimvr",
+                    "fallout": "fallout4",
                     "fallout4": "fallout4",
+                    "fo4": "fallout4",
+                    "fallout4vr": "fallout4vr",
+                    "fnv": "falloutnv",
                     "falloutnv": "falloutnv",
                     "oblivion": "oblivion",
-                    "enderalspecialedition": "enderalse"
+                    "enderal": "enderalse",
+                    "enderalspecialedition": "enderalse",
+                    "bg3": "bg3",
+                    "baldursgate3": "bg3",
+                    "cp2077": "cp2077",
+                    "starfield": "starfield",
                 }
-                game_name = game_name_map.get(self.game_var.lower(), None)
-                
+                game_name = game_name_map.get((self.game_var or '').lower(), None)
+
+                # Fallback: read gameName= directly from ModOrganizer.ini when loader-based
+                # detection returned Unknown (e.g. Enderal uses a non-SKSE launcher variant)
+                if not game_name and self.modlist_dir:
+                    try:
+                        from jackify.backend.services.steamgriddb_service import detect_game_type_from_modlist
+                        _detected = detect_game_type_from_modlist(str(self.modlist_dir))
+                        if _detected:
+                            game_name = game_name_map.get(_detected, _detected)
+                            self.logger.info(f"Step 4.7: game type resolved via gameName= fallback: {_detected} -> {game_name}")
+                    except Exception as _fe:
+                        self.logger.debug(f"Step 4.7 fallback detection failed: {_fe}")
+
                 if game_name:
                     appid_str = str(self.appid)
                     if self.filesystem_handler.create_required_dirs(game_name, appid_str):
@@ -295,12 +273,41 @@ class ModlistConfigurationMixin:
                     else:
                         self.logger.warning("Failed to create Wine prefix Documents directories (non-critical, continuing)")
                 else:
-                    self.logger.debug(f"Game {self.game_var} not in directory creation map, skipping")
+                    self.logger.debug(f"Game {self.game_var!r} not in directory creation map, skipping")
             else:
-                self.logger.warning("AppID or game_var not available, skipping Wine prefix Documents directory creation")
+                self.logger.warning("AppID not available, skipping Wine prefix Documents directory creation")
         except Exception as e:
             self.logger.warning(f"Error creating Wine prefix Documents directories: {e} (non-critical, continuing)")
         self.logger.info("Step 4.7: Creating Wine prefix Documents directories... Done")
+
+        # Step 4.8: Configure nxmhandler.ini to suppress MO2 NXM registration popup
+        self.logger.info("Step 4.8: Configuring nxmhandler.ini...")
+        try:
+            self._configure_nxmhandler_ini()
+        except Exception as e:
+            self.logger.debug(f"nxmhandler.ini configuration failed (non-critical): {e}")
+        self.logger.info("Step 4.8: Configuring nxmhandler.ini... Done")
+
+        # Step 4.9: Inject game install path registry entries (FNV/FO3/Enderal/CP2077/BG3).
+        # Required so the game launcher and engine can locate the base game when
+        # MO2 is running inside the Proton prefix.  Idempotent: safe to run on
+        # reinstall or re-configure.
+        self.logger.info("Step 4.9: Injecting game registry entries...")
+        try:
+            compatdata_path = self.path_handler.find_compat_data(str(self.appid))
+            if compatdata_path:
+                from jackify.backend.services.automated_prefix_service import AutomatedPrefixService
+                from jackify.backend.models.configuration import SystemInfo
+                from jackify.backend.services.platform_detection_service import PlatformDetectionService
+                _svc = AutomatedPrefixService(SystemInfo(
+                    is_steamdeck=PlatformDetectionService.get_instance().is_steamdeck
+                ))
+                _svc._inject_game_registry_entries(str(compatdata_path), self.game_var or '')
+            else:
+                self.logger.debug("Compatdata path not found for game registry injection, skipping")
+        except Exception as e:
+            self.logger.warning("Game registry injection failed (non-fatal): %s", e)
+        self.logger.info("Step 4.9: Injecting game registry entries... Done")
 
         # Step 5: Verify ownership of Modlist directory
         if status_callback:
@@ -327,6 +334,10 @@ class ModlistConfigurationMixin:
             return False # Abort on failure
         self.logger.info(f"ModOrganizer.ini backed up to: {backup_path}")
         self.logger.info("Step 6: Backing up ModOrganizer.ini... Done")
+
+        # Step 6.1: BG3-specific patches to ModOrganizer.ini and MO2 plugins
+        self._patch_bg3_mod_settings_plugin()
+        self._set_bg3_rootbuilder_copy_mode()
 
         # Step 6.5: Handle symlinked downloads directory
         if status_callback:
@@ -419,6 +430,21 @@ class ModlistConfigurationMixin:
                 self.logger.info("Set download_directory in ModOrganizer.ini (Install flow)")
             else:
                 self.logger.warning("Could not set download_directory in ModOrganizer.ini")
+        elif modlist_ini_path_obj.is_file():
+            # Configure Existing / Configure New flows: no explicit download_dir is set, but the
+            # INI may have duplicate or mangled entries from the original Wabbajack install.
+            # Read the first valid value, then re-write all occurrences to that value so MO2
+            # reads the correct path regardless of which occurrence it picks up last.
+            existing_linux = self.path_handler.get_download_directory_linux_path(modlist_ini_path_obj)
+            if existing_linux:
+                if self.path_handler.set_download_directory(
+                    modlist_ini_path_obj, existing_linux, self.modlist_sdcard
+                ):
+                    self.logger.info("Normalised download_directory entries in ModOrganizer.ini")
+                else:
+                    self.logger.warning("Could not normalise download_directory in ModOrganizer.ini")
+            else:
+                self.logger.debug("No existing download_directory value found in ModOrganizer.ini; skipping normalisation")
 
         # Step 8.5: Align /home vs /var/home basis for Z: paths to match modlist install directory.
         # This is intentionally separate from broad binary-path rewriting so it still runs when
@@ -584,6 +610,47 @@ class ModlistConfigurationMixin:
             status_callback(f"{self._get_progress_timestamp()} Re-applying final Windows compatibility settings")
         self._re_enforce_windows_10_mode()
 
+        # Step 15: Apply tool compatibility settings (xEdit, Pandora, DLL overrides).
+        # Only runs for standard Skyrim SE/AE modlists. Non-Skyrim games (Enderal, FNV,
+        # FO3, etc.) are excluded because the mscoree AppDefault targets SkyrimSE.exe,
+        # which is also Enderal's executable, causing a crash on those modlists.
+        _special_type = self.detect_special_game_type(self.modlist_dir)
+        try:
+            from jackify.backend.handlers.config_handler import ConfigHandler
+            if ConfigHandler().get('auto_tool_compat', True) and _special_type is None:
+                if status_callback:
+                    status_callback(f"{self._get_progress_timestamp()} Applying tool compatibility settings")
+                self.logger.info("Step 15: Applying tool compatibility settings...")
+                compatdata_path = str(wineprefix).replace("/pfx", "").rstrip("/")
+                wine_bin = self._find_wine_binary_for_registry()
+                if compatdata_path and wine_bin:
+                    from jackify.backend.services.tool_config_service import apply_tool_config
+                    apply_tool_config(
+                        compatdata_path,
+                        wine_bin,
+                        log=lambda msg: status_callback(f"{self._get_progress_timestamp()} {msg}") if status_callback else None,
+                        install_dotnet9_sdk=True,
+                        install_fxc2_d3dcompiler=True,
+                    )
+                    self.logger.info("Step 15: Tool compatibility settings applied")
+                else:
+                    self.logger.warning("Step 15: Could not resolve prefix path or wine binary - skipping tool compat")
+            elif _special_type is not None:
+                self.logger.info(f"Step 15: Skipping tool compat for {_special_type} modlist")
+        except Exception as e:
+            self.logger.warning("Step 15: Tool compatibility settings failed (non-fatal): %s", e)
+
+        # Step 16: Nemesis compatibility setup (symlink + workingDirectory fix)
+        try:
+            from jackify.backend.services.tool_config_service import setup_nemesis_compatibility
+            setup_nemesis_compatibility(
+                modlist_dir=self.modlist_dir,
+                stock_game_path=self.stock_game_path,
+                log=lambda msg: status_callback(f"{self._get_progress_timestamp()} {msg}") if status_callback else None,
+            )
+        except Exception as e:
+            self.logger.warning("Step 16: Nemesis setup failed (non-fatal): %s", e)
+
         return True # Return True on success
 
     def run_modlist_configuration_phase(self, context: dict = None) -> bool:
@@ -596,6 +663,48 @@ class ModlistConfigurationMixin:
         # Pass along the status_callback if it was provided in the context
         status_callback = context.get('status_callback') if context else None
         return self._execute_configuration_steps(status_callback=status_callback)
+
+    def _configure_nxmhandler_ini(self) -> None:
+        """
+        Set noregister=true in nxmhandler.ini in the MO2 install directory.
+
+        MO2 reads this flag on startup and skips the NXM handler registration
+        popup when it is true. On Linux, MO2's NXM handler cannot be registered
+        usefully via Wine; Jackify will become its own NXM handler in a later cycle.
+        Safe to apply on every configuration run - always correct on Linux.
+        """
+        if not self.modlist_dir:
+            return
+
+        nxm_ini_path = os.path.join(self.modlist_dir, "nxmhandler.ini")
+
+        try:
+            if os.path.exists(nxm_ini_path):
+                with open(nxm_ini_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                if re.search(r'(?im)^\s*noregister\s*=\s*true\s*$', content):
+                    self.logger.debug("nxmhandler.ini noregister already true, skipping")
+                    return
+
+                # Replace existing noregister=... line if present, otherwise inject after [General]
+                if re.search(r'(?im)^\s*noregister\s*=', content):
+                    content = re.sub(r'(?im)^\s*noregister\s*=.*$', 'noregister=true', content)
+                elif re.search(r'(?im)^\s*\[General\]', content):
+                    content = re.sub(r'(?im)(^\s*\[General\]\s*\n)', r'\1noregister=true\n', content)
+                else:
+                    content += '\n[General]\nnoregister=true\n'
+
+                with open(nxm_ini_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self.logger.info(f"Set noregister=true in {nxm_ini_path}")
+            else:
+                # MO2 creates nxmhandler.ini on first run; pre-create with the flag set
+                with open(nxm_ini_path, 'w', encoding='utf-8') as f:
+                    f.write("[General]\nnoregister=true\n")
+                self.logger.info(f"Created nxmhandler.ini with noregister=true: {nxm_ini_path}")
+        except Exception as e:
+            self.logger.warning(f"Could not configure nxmhandler.ini: {e}")
 
     def _prompt_or_set_resolution(self):
         # If on Steam Deck, set 1280x800 automatically
@@ -617,3 +726,73 @@ class ModlistConfigurationMixin:
             else:
                 self.selected_resolution = None
                 self.logger.info("Resolution setup skipped by user.")
+
+    def _patch_bg3_mod_settings_plugin(self) -> None:
+        """
+        Fix a bug in the BG3 MO2 plugin (Alvadus/BG3-MO2-Unofficial-Plugin) where
+        mods_order_node is conditionally created but unconditionally referenced.
+        Bug present in upstream source as of 2026-03; author not yet notified.
+        Safe to apply: always creating the ModOrder node is valid BG3 XML regardless of mod count.
+        """
+        import os
+        if not self.modlist_dir:
+            return
+        plugin_path = os.path.join(
+            str(self.modlist_dir),
+            "plugins", "basic_games", "games", "baldursgate3", "modSettings.py"
+        )
+        if not os.path.exists(plugin_path):
+            self.logger.debug("BG3 modSettings.py plugin not found, skipping patch")
+            return
+        try:
+            with open(plugin_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            buggy = (
+                "    if len(mod_settings) > 1:\n"
+                "        mods_order_node = ET.SubElement(children, \"node\")\n"
+                "        mods_order_node.set(\"id\", \"ModOrder\")"
+            )
+            fixed = (
+                "    mods_order_node = ET.SubElement(children, \"node\")\n"
+                "    mods_order_node.set(\"id\", \"ModOrder\")"
+            )
+            if buggy in content:
+                content = content.replace(buggy, fixed)
+                with open(plugin_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self.logger.info("Applied modSettings.py patch for BG3 MO2 plugin")
+            elif fixed in content:
+                self.logger.debug("BG3 modSettings.py already patched, skipping")
+            else:
+                self.logger.warning("BG3 modSettings.py patch target not found - plugin may have changed upstream")
+        except Exception as e:
+            self.logger.warning(f"Could not patch BG3 modSettings.py: {e} (non-critical, continuing)")
+
+    def _set_bg3_rootbuilder_copy_mode(self) -> None:
+        """
+        Switch Root Builder to copy mode in ModOrganizer.ini for BG3 modlists.
+        Link mode (the shipped default) fails on Linux - files are not accessible
+        to the game process across the Wine boundary. Copy mode works reliably.
+        Applied unconditionally: copy mode is safe regardless of drive layout.
+        Detected by presence of RootBuilder keys rather than game_var (unreliable for BG3).
+        """
+        import os, re
+        if not self.modlist_dir:
+            return
+        mo2_ini = os.path.join(str(self.modlist_dir), "ModOrganizer.ini")
+        if not os.path.exists(mo2_ini):
+            self.logger.debug("ModOrganizer.ini not found, skipping Root Builder copy mode patch")
+            return
+        try:
+            with open(mo2_ini, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            if 'RootBuilder\\' not in content and 'RootBuilder/' not in content:
+                self.logger.debug("Root Builder not present in ModOrganizer.ini, skipping")
+                return
+            content = re.sub(r'^(RootBuilder\\copyfiles\s*=).*$', r'\1**', content, flags=re.MULTILINE)
+            content = re.sub(r'^(RootBuilder\\linkfiles\s*=).*$', r'\1', content, flags=re.MULTILINE)
+            with open(mo2_ini, 'w', encoding='utf-8') as f:
+                f.write(content)
+            self.logger.info("Set Root Builder to copy mode in ModOrganizer.ini")
+        except Exception as e:
+            self.logger.warning(f"Could not set Root Builder copy mode: {e} (non-critical, continuing)")

@@ -91,9 +91,7 @@ class ModlistGalleryService:
             return metadata
 
         except Exception as e:
-            print(f"Error fetching modlist metadata: {e}")
-            print("Falling back to cached metadata (may be outdated)")
-            # Fall back to cache if network/engine fails
+            logger.warning("Error fetching modlist metadata: %s - falling back to cache", e)
             return self._load_from_cache()
 
     def _fetch_from_engine(
@@ -164,7 +162,7 @@ class ModlistGalleryService:
                 data = json.load(f)
             return parse_modlist_metadata_response(data)
         except Exception as e:
-            print(f"Error loading cache: {e}")
+            logger.warning("Error loading metadata cache: %s", e)
             return None
 
     def _save_to_cache(self, metadata: ModlistMetadataResponse):
@@ -182,7 +180,7 @@ class ModlistGalleryService:
                 json.dump(data, f, indent=2)
 
         except Exception as e:
-            print(f"Error saving cache: {e}")
+            logger.warning("Error saving metadata cache: %s", e)
 
     def _metadata_to_dict(self, metadata: ModlistMetadata) -> dict:
         """Convert ModlistMetadata to dict for JSON serialization"""
@@ -306,7 +304,7 @@ class ModlistGalleryService:
                 )
             return result.returncode == 0
         except Exception as e:
-            print(f"Error downloading images: {e}")
+            logger.warning("Error downloading gallery images: %s", e)
             return False
 
     def get_cached_image_path(self, metadata: ModlistMetadata, size: str = "large") -> Optional[Path]:

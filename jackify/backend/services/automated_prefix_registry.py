@@ -1,5 +1,6 @@
 """Registry operations mixin for AutomatedPrefixService."""
 import os
+import re
 import subprocess
 import logging
 from pathlib import Path
@@ -74,7 +75,7 @@ class RegistryOperationsMixin:
     def _apply_universal_dotnet_fixes(self, modlist_compatdata_path: str):
         """Apply universal dotnet4.x compatibility registry fixes to ALL modlists.
 
-        Direct file editing is preferred over `wine reg add` — faster, no Wine
+        Direct file editing is preferred over `wine reg add` - faster, no Wine
         process overhead, and works even when Proton isn't on PATH.  Falls back
         to subprocess wine reg add when the reg files haven't been created yet.
         """
@@ -91,10 +92,12 @@ class RegistryOperationsMixin:
 
             fix1 = fix2 = False
 
+            # Targeted per-exe override for SkyrimSE.exe only - see modlist_wine_ops.py
+            # for rationale. Global DllOverrides entry breaks .NET 9/10 bootstrap.
             if os.path.exists(user_reg):
                 fix1 = self._reg_set_value(
                     user_reg,
-                    "[Software\\\\Wine\\\\DllOverrides]",
+                    "[Software\\\\Wine\\\\AppDefaults\\\\SkyrimSE.exe\\\\DllOverrides]",
                     '"*mscoree"',
                     '"native"',
                 )
@@ -123,7 +126,7 @@ class RegistryOperationsMixin:
 
             r1 = subprocess.run(
                 [wine_binary, 'reg', 'add',
-                 'HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides',
+                 'HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\SkyrimSE.exe\\DllOverrides',
                  '/v', '*mscoree', '/t', 'REG_SZ', '/d', 'native', '/f'],
                 env=env, capture_output=True, text=True, errors='replace',
             )
@@ -144,6 +147,53 @@ class RegistryOperationsMixin:
         except Exception as e:
             logger.error(f"Failed to apply universal dotnet4.x fixes: {e}")
             return False
+
+    def _apply_cp2077_dll_overrides(self, modlist_compatdata_path: str) -> bool:
+        """Write CP2077 DLL overrides directly into the prefix user.reg.
+
+        MO2 on Linux launches each executable through a separate Proton invocation,
+        so WINEDLLOVERRIDES set in Steam launch options is not inherited by the game
+        process. Writing the overrides into user.reg ensures they are always applied
+        regardless of how the process is started.
+
+        version and winmm are the entry-point DLLs for CET and Red4ext respectively.
+        Without native,builtin for both, neither mod framework can inject into the
+        game process and CP2077 exits immediately.
+        """
+        try:
+            user_reg = os.path.join(modlist_compatdata_path, "pfx", "user.reg")
+            if not os.path.exists(user_reg):
+                logger.warning("user.reg not found, cannot apply CP2077 DLL overrides")
+                return False
+
+            section = "[Software\\\\Wine\\\\DllOverrides]"
+            overrides = [
+                ('"version"', '"native,builtin"'),
+                ('"winmm"', '"native,builtin"'),
+            ]
+            for key, val in overrides:
+                self._reg_set_value(user_reg, section, key, val)
+
+            logger.info("Applied CP2077 DLL overrides (version, winmm) to prefix registry")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to apply CP2077 DLL overrides: {e}")
+            return False
+
+    @staticmethod
+    def _wow64_counterpart(section: str) -> str:
+        """Return the Wow6432Node counterpart for a registry section, or vice versa.
+
+        NaK writes both paths for every game so both 32-bit and 64-bit lookups
+        resolve correctly regardless of the calling process's bitness.
+        """
+        low = section.lower()
+        if "wow6432node" in low:
+            # Strip Wow6432Node to get the 64-bit path
+            return re.sub(r'(?i)wow6432node\\\\', '', section)
+        else:
+            # Insert Wow6432Node after the opening [Software\\
+            return re.sub(r'(?i)(\[Software\\\\)', r'\1Wow6432Node\\\\', section)
 
     def _reg_set_value(self, reg_path: str, section: str, key: str, value: str) -> bool:
         """Set or add a key=value pair in a Wine .reg text file."""
@@ -319,25 +369,91 @@ class RegistryOperationsMixin:
                 "name": "Fallout New Vegas",
                 "common_names": ["Fallout New Vegas", "FalloutNV"],
                 "registry_section": "[Software\\\\Wow6432Node\\\\bethesda softworks\\\\falloutnv]",
-                "path_key": "Installed Path",
+                "path_key": "installed path",
             },
             "22300": {  # Fallout 3 AppID
                 "name": "Fallout 3",
                 "common_names": ["Fallout 3", "Fallout3", "Fallout 3 GOTY"],
                 "registry_section": "[Software\\\\Wow6432Node\\\\bethesda softworks\\\\fallout3]",
-                "path_key": "Installed Path",
+                "path_key": "installed path",
             },
             "22370": {  # Fallout 3 GOTY AppID alias
                 "name": "Fallout 3",
                 "common_names": ["Fallout 3 GOTY", "Fallout 3"],
                 "registry_section": "[Software\\\\Wow6432Node\\\\bethesda softworks\\\\fallout3]",
-                "path_key": "Installed Path",
+                "path_key": "installed path",
             },
             "976620": {  # Enderal Special Edition AppID
                 "name": "Enderal",
                 "common_names": ["Enderal: Forgotten Stories (Special Edition)", "Enderal Special Edition", "Enderal"],
                 "registry_section": "[Software\\\\Wow6432Node\\\\SureAI\\\\Enderal SE]",
                 "path_key": "installed path",
+            },
+            "1091500": {  # Cyberpunk 2077 AppID
+                "name": "Cyberpunk 2077",
+                "common_names": ["Cyberpunk 2077"],
+                "registry_section": "[Software\\\\CD Projekt Red\\\\Cyberpunk 2077]",
+                "path_key": "InstallFolder",
+            },
+            "1086940": {  # Baldur's Gate 3 AppID
+                "name": "Baldur's Gate 3",
+                "common_names": ["Baldur's Gate 3", "BaldursGate3"],
+                "registry_section": "[Software\\\\Larian Studios\\\\Baldur's Gate 3]",
+                "path_key": "InstallDir",
+            },
+            "611670": {  # Skyrim VR AppID (64-bit, no Wow6432Node)
+                "name": "Skyrim VR",
+                "common_names": ["Skyrim VR", "SkyrimVR"],
+                "registry_section": "[Software\\\\Bethesda Softworks\\\\Skyrim VR]",
+                "path_key": "Installed Path",
+            },
+            "611660": {  # Fallout 4 VR AppID (64-bit, no Wow6432Node)
+                "name": "Fallout 4 VR",
+                "common_names": ["Fallout 4 VR", "Fallout4VR"],
+                "registry_section": "[Software\\\\Bethesda Softworks\\\\Fallout 4 VR]",
+                "path_key": "Installed Path",
+            },
+            "22330": {  # Oblivion AppID
+                "name": "Oblivion",
+                "common_names": ["Oblivion", "Elder Scrolls IV Oblivion"],
+                "registry_section": "[Software\\\\Wow6432Node\\\\bethesda softworks\\\\oblivion]",
+                "path_key": "installed path",
+            },
+            "1716740": {  # Starfield AppID (64-bit, no Wow6432Node)
+                "name": "Starfield",
+                "common_names": ["Starfield"],
+                "registry_section": "[Software\\\\Bethesda Softworks\\\\Starfield]",
+                "path_key": "Installed Path",
+            },
+            "489830": {  # Skyrim Special Edition AppID (64-bit, no Wow6432Node)
+                "name": "Skyrim Special Edition",
+                "common_names": ["Skyrim Special Edition", "SkyrimSE", "Skyrim Anniversary Edition"],
+                "registry_section": "[Software\\\\Bethesda Softworks\\\\Skyrim Special Edition]",
+                "path_key": "Installed Path",
+            },
+            "377160": {  # Fallout 4 AppID (64-bit, no Wow6432Node)
+                "name": "Fallout 4",
+                "common_names": ["Fallout 4", "Fallout4"],
+                "registry_section": "[Software\\\\Bethesda Softworks\\\\Fallout4]",
+                "path_key": "Installed Path",
+            },
+            "22320": {  # Morrowind AppID (32-bit, Wow6432Node)
+                "name": "Morrowind",
+                "common_names": ["Morrowind", "Elder Scrolls III Morrowind"],
+                "registry_section": "[Software\\\\Wow6432Node\\\\bethesda softworks\\\\morrowind]",
+                "path_key": "Installed Path",
+            },
+            "292030": {  # The Witcher 3 AppID (64-bit, no Wow6432Node)
+                "name": "The Witcher 3",
+                "common_names": ["The Witcher 3", "Witcher 3", "The Witcher 3 Wild Hunt"],
+                "registry_section": "[Software\\\\CD Projekt Red\\\\The Witcher 3]",
+                "path_key": "InstallFolder",
+            },
+            "2623190": {  # Oblivion Remastered AppID (64-bit UE5, no Wow6432Node)
+                "name": "Oblivion Remastered",
+                "common_names": ["Oblivion Remastered", "OblivionRemastered"],
+                "registry_section": "[Software\\\\Bethesda Softworks\\\\Oblivion Remastered]",
+                "path_key": "Installed Path",
             },
         }
 
@@ -359,24 +475,22 @@ class RegistryOperationsMixin:
                 game_dir_name = Path(game_path).name
                 canonical_win_path = f"C:\\Program Files (x86)\\Steam\\steamapps\\common\\{game_dir_name}"
                 wine_val = canonical_win_path.replace("\\", "\\\\") + "\\\\"
-                success = self._reg_set_value(
-                    system_reg_path,
-                    config["registry_section"],
-                    f'"{config["path_key"]}"',
-                    f'"{wine_val}"',
-                )
+                key = f'"{config["path_key"]}"'
+                val = f'"{wine_val}"'
+                success = self._reg_set_value(system_reg_path, config["registry_section"], key, val)
+                self._reg_set_value(system_reg_path, self._wow64_counterpart(config["registry_section"]), key, val)
                 if success:
                     logger.info(f"Registry set to canonical path for {config['name']}: {canonical_win_path}")
                 else:
                     logger.warning(f"Failed to set canonical registry path for {config['name']}")
             else:
-                # Symlink failed — fall back to writing the real Z:/D: path
+                # Symlink failed - fall back to writing the real Z:/D: path
                 logger.warning(f"Symlink failed for {config['name']}, writing real path to registry")
                 success = self._update_registry_path(
-                    system_reg_path,
-                    config["registry_section"],
-                    config["path_key"],
-                    game_path
+                    system_reg_path, config["registry_section"], config["path_key"], game_path
+                )
+                self._update_registry_path(
+                    system_reg_path, self._wow64_counterpart(config["registry_section"]), config["path_key"], game_path
                 )
                 if success:
                     logger.info(f"Updated registry entry for {config['name']} (real path fallback)")

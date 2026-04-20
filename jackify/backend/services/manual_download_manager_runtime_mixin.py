@@ -224,7 +224,7 @@ class ManualDownloadManagerRuntimeMixin:
                 item_to_notify = item
                 completed_now = True
             else:
-                # Hash mismatch or validation error — revert to pending so the
+                # Hash mismatch or validation error - revert to pending so the
                 # sliding window can re-open a browser tab and the watcher can
                 # re-validate if the user downloads the correct file.
                 item.status = 'pending'

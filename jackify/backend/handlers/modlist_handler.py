@@ -61,32 +61,9 @@ class ModlistHandler(ModlistDetectionMixin, ModlistConfigurationMixin, ModlistWi
     Handles operations related to modlist detection and configuration
     """
     
-    # Dictionary mapping modlist name patterns (lowercase, spaces optional) 
-    # to lists of additional Wine components or special actions.
-    MODLIST_SPECIFIC_COMPONENTS = {
-        # Pattern: [component1, component2, ... or special_action_string]
-        "wildlander": ["dotnet48"], # Example from bash script
-        "licentia": ["dotnet8"],   # Example from bash script (needs special handling)
-        "nolvus": ["dotnet6", "dotnet7"], # Example
-        # Add other modlists and their specific needs here
-        # e.g., "fallout4_anotherlife": ["some_component"] 
-    }
-    
-    # Canonical mapping of modlist-specific Wine components (from omni-guides.sh)
-    # dotnet4.x components disabled in v0.1.6.2 -- replaced with universal registry fixes
-    MODLIST_WINE_COMPONENTS = {
-        # "wildlander": ["dotnet472"],  # DISABLED: Universal registry fixes replace dotnet472 installation
-        # "librum": ["dotnet40", "dotnet8"],  # PARTIAL DISABLE: Keep dotnet8, remove dotnet40
-        "librum": ["dotnet8"],  # dotnet40 replaced with universal registry fixes
-        # "apostasy": ["dotnet40", "dotnet8"],  # PARTIAL DISABLE: Keep dotnet8, remove dotnet40
-        "apostasy": ["dotnet8"],  # dotnet40 replaced with universal registry fixes
-        # "nordicsouls": ["dotnet40"],  # DISABLED: Universal registry fixes replace dotnet40 installation
-        # "livingskyrim": ["dotnet40"],  # DISABLED: Universal registry fixes replace dotnet40 installation
-        # "lsiv": ["dotnet40"],  # DISABLED: Universal registry fixes replace dotnet40 installation
-        # "ls4": ["dotnet40"],  # DISABLED: Universal registry fixes replace dotnet40 installation
-        # "lorerim": ["dotnet40"],  # DISABLED: Universal registry fixes replace dotnet40 installation
-        # "lostlegacy": ["dotnet40"],  # DISABLED: Universal registry fixes replace dotnet40 installation
-    }
+    MODLIST_SPECIFIC_COMPONENTS: dict = {}
+
+    MODLIST_WINE_COMPONENTS: dict = {}
     
     def __init__(self, steam_path_or_config: Union[Dict, str, Path, None] = None, 
                  mo2_path: Optional[Union[str, Path]] = None, 

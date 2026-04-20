@@ -7,7 +7,9 @@ and coordinating the update process.
 
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +34,7 @@ class UpdateInfo:
     file_size: Optional[int] = None
     is_critical: bool = False
     is_delta_update: bool = False
+    github_download_url: Optional[str] = None
 
 
 class UpdateService:
@@ -98,7 +101,7 @@ class UpdateService:
                             break
                 
                 if download_url:
-                    # Prefer Nexus CDN for Premium users if this version is available there
+                    github_url = download_url
                     nexus_url = self._try_nexus_download_url(latest_version)
                     update_source = "github"
                     if nexus_url:
@@ -108,16 +111,13 @@ class UpdateService:
                     else:
                         logger.info("Update source: GitHub Releases (version %s)", latest_version)
 
-                    # Determine if this is a delta update
                     is_delta = '.delta' in download_url or 'delta' in download_url.lower()
 
-                    # Safety checks to prevent segfault
                     try:
-                        # Sanitize string fields
                         safe_version = str(latest_version) if latest_version else ""
                         safe_tag = str(release_data.get('tag_name', ''))
                         safe_date = str(release_data.get('published_at', ''))
-                        safe_changelog = str(release_data.get('body', ''))[:1000]  # Limit size
+                        safe_changelog = str(release_data.get('body', ''))[:1000]
                         safe_url = str(download_url)
 
                         logger.debug(f"Creating UpdateInfo for version {safe_version}")
@@ -131,6 +131,7 @@ class UpdateService:
                             file_size=file_size,
                             is_delta_update=is_delta,
                             source=update_source,
+                            github_download_url=str(github_url),
                         )
                         
                         logger.debug(f"UpdateInfo created successfully")
@@ -159,6 +160,13 @@ class UpdateService:
         and return a CDN download URL for the file matching target_version.
         Returns None on any failure or if the version is not yet on Nexus.
         """
+        try:
+            from jackify.backend.handlers.config_handler import ConfigHandler
+            if ConfigHandler().get('force_github_updates', False):
+                logger.info("Nexus update source bypassed: force_github_updates is enabled")
+                return None
+        except Exception:
+            pass
         try:
             from jackify.backend.services.nexus_auth_service import NexusAuthService
             auth_service = NexusAuthService()
@@ -301,33 +309,38 @@ class UpdateService:
         logger.debug(f"Self-updating enabled for AppImage: {appimage_path}")
         return True
     
-    def download_update(self, update_info: UpdateInfo, 
+    def download_update(self, update_info: UpdateInfo,
                        progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[Path]:
         """
-        Download update using full AppImage replacement.
-        
-        Since we can't rely on external tools being available, we use a reliable
-        full replacement approach that works on all systems without dependencies.
-        
-        Args:
-            update_info: Information about the update to download
-            progress_callback: Optional callback for download progress (bytes_downloaded, total_bytes)
-            
-        Returns:
-            Path to downloaded file, or None if download failed
+        Download update AppImage. Falls back to GitHub if the primary source fails.
         """
-        try:
-            logger.info("Downloading update %s from %s (full replacement)", update_info.version, update_info.source)
-            result = self._download_update_manual(update_info, progress_callback)
-            if result:
-                logger.info("Update download complete: %s from %s -> %s", update_info.version, update_info.source, result)
-            else:
-                logger.error("Update download failed: %s from %s", update_info.version, update_info.source)
+        logger.info("Downloading update %s from %s (full replacement)", update_info.version, update_info.source)
+        result = self._download_update_manual(update_info, progress_callback)
+        if result:
+            logger.info("Update download complete: %s from %s -> %s", update_info.version, update_info.source, result)
             return result
-            
-        except Exception as e:
-            logger.error(f"Failed to download update: {e}")
-            return None
+
+        # Primary source failed - fall back to GitHub if we came from Nexus
+        if update_info.source == "nexus" and update_info.github_download_url:
+            logger.warning("Nexus download failed, falling back to GitHub")
+            fallback = UpdateInfo(
+                version=update_info.version,
+                tag_name=update_info.tag_name,
+                release_date=update_info.release_date,
+                changelog=update_info.changelog,
+                download_url=update_info.github_download_url,
+                source="github",
+                file_size=update_info.file_size,
+                is_delta_update=False,
+                github_download_url=update_info.github_download_url,
+            )
+            result = self._download_update_manual(fallback, progress_callback)
+            if result:
+                logger.info("Update download complete via GitHub fallback: %s -> %s", update_info.version, result)
+                return result
+
+        logger.error("Update download failed: %s", update_info.version)
+        return None
     
     def _download_update_manual(self, update_info: UpdateInfo, 
                                progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[Path]:
@@ -414,27 +427,41 @@ class UpdateService:
         return None
 
     def _extract_appimage_from_7z(self, archive: Path, dest_dir: Path, version: str) -> Optional[Path]:
-        """Extract Jackify.AppImage from a 7z archive into dest_dir."""
+        """Extract AppImage from a 7z archive into dest_dir."""
         seven_z = self._get_bundled_7z_path()
         if not seven_z:
             logger.error("Bundled 7z not found, cannot extract update archive")
             return None
         out_path = dest_dir / f"Jackify-{version}.AppImage"
+        if out_path.exists():
+            out_path.unlink()
+        tmp_dir = Path(tempfile.mkdtemp(dir=dest_dir))
         try:
             result = subprocess.run(
-                [str(seven_z), 'e', str(archive), 'Jackify.AppImage', f'-o{dest_dir}', '-y'],
+                [str(seven_z), 'e', str(archive), f'-o{tmp_dir}', '-y'],
                 capture_output=True, text=True, timeout=120
             )
-            extracted = dest_dir / 'Jackify.AppImage'
-            if result.returncode != 0 or not extracted.exists():
+            if result.returncode != 0:
                 logger.error("7z extraction failed (rc=%d): %s", result.returncode, result.stderr.strip())
                 return None
-            extracted.rename(out_path)
-            logger.info("Extracted AppImage from archive: %s", out_path)
+            candidates = list(tmp_dir.glob('*.AppImage'))
+            if not candidates:
+                logger.error("No .AppImage found in archive contents: %s",
+                             [p.name for p in tmp_dir.iterdir()])
+                return None
+            extracted = candidates[0]
+            logger.debug("Found %s in archive (%d bytes)", extracted.name, extracted.stat().st_size)
+            shutil.move(str(extracted), str(out_path))
+            if not out_path.exists():
+                logger.error("AppImage missing after move to %s", out_path)
+                return None
+            logger.info("Extracted AppImage to %s (%d bytes)", out_path, out_path.stat().st_size)
             return out_path
         except Exception as e:
             logger.error("Exception during 7z extraction: %s", e)
             return None
+        finally:
+            shutil.rmtree(str(tmp_dir), ignore_errors=True)
     
     def apply_update(self, new_appimage_path: Path) -> bool:
         """

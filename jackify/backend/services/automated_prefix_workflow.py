@@ -178,10 +178,20 @@ class WorkflowMixin:
             modlist_handler = ModlistHandler()
             special_game_type = modlist_handler.detect_special_game_type(modlist_install_dir)
 
-            # No launch options needed - FNV, FO3 and Enderal use registry injection
             custom_launch_options = None
             if special_game_type in ["fnv", "fo3", "enderal"]:
                 logger.info(f"Using registry injection approach for {special_game_type.upper()} modlist")
+            elif special_game_type == "cp2077":
+                logger.info("Cyberpunk 2077 modlist detected - setting WINEDLLOVERRIDES for Red4ext/CET")
+                # version=n,b overrides d3d version detection for REDmod; winmm=n,b required for CET
+                custom_launch_options = 'WINEDLLOVERRIDES="version=n,b;winmm=n,b" %command%'
+            elif special_game_type == "bg3":
+                logger.info("Baldur's Gate 3 modlist detected")
+                logger.warning("BG3 modlists require Rootbuilder in COPY mode - verify this in MO2 plugin settings")
+            elif special_game_type in ["skyrimvr", "fallout4vr"]:
+                game_label = "Skyrim VR" if special_game_type == "skyrimvr" else "Fallout 4 VR"
+                logger.warning("%s modlist detected - SteamVR must be installed and running for this modlist to work", game_label)
+                logger.warning("%s modlists use Rootbuilder for game root files - ensure Rootbuilder is set to COPY mode in MO2 plugin settings", game_label)
             else:
                 logger.debug("Standard modlist - no special game handling needed")
 
@@ -201,6 +211,31 @@ class WorkflowMixin:
             logger.info("Step 0 completed: Steam shut down")
             if progress_callback:
                 progress_callback(f"{self._get_progress_timestamp()} Steam shut down")
+
+            # Pre-fetch SteamGridDB artwork before shortcut creation so the icon field in
+            # shortcuts.vdf is populated at write time. Steam caches the icon on first read
+            # after restart; setting it after the fact has no effect.
+            steamicons_dir = Path(modlist_install_dir) / "SteamIcons"
+            if not steamicons_dir.is_dir():
+                from ..services.steamgriddb_service import detect_game_type_from_modlist
+                _prefetch_game_type = detect_game_type_from_modlist(modlist_install_dir)
+                if _prefetch_game_type:
+                    try:
+                        from ..services.steamgriddb_service import fetch_artwork
+                        steamicons_dir.mkdir(parents=True, exist_ok=True)
+                        count = fetch_artwork(_prefetch_game_type, steamicons_dir)
+                        if count == 0:
+                            steamicons_dir.rmdir()
+                            logger.debug("SteamGridDB pre-fetch returned no images")
+                        else:
+                            logger.info(f"Pre-fetched {count} SteamGridDB images to {steamicons_dir}")
+                    except Exception as e:
+                        logger.debug(f"SteamGridDB pre-fetch failed: {e}")
+                        try:
+                            if steamicons_dir.is_dir() and not any(steamicons_dir.iterdir()):
+                                steamicons_dir.rmdir()
+                        except Exception:
+                            pass
 
             # Step 1: Create shortcut with native Steam service (Steam is now shut down)
             logger.info("Step 1: Creating shortcut with native Steam service")
@@ -222,9 +257,9 @@ class WorkflowMixin:
                 from ..handlers.modlist_handler import ModlistHandler
                 modlist_handler = ModlistHandler()
                 modlist_handler.set_steam_grid_images(str(appid), modlist_install_dir)
-                logger.info(f"Applied Steam artwork for shortcut '{shortcut_name}' (AppID: {appid})")
+                logger.info(f"Steam artwork applied for shortcut '{shortcut_name}' (AppID: {appid})")
             except Exception as e:
-                logger.warning(f"Failed to apply Steam artwork: {e}")
+                logger.warning(f"Steam artwork application failed: {e}")
             
             # Step 2: Start Steam (if auto_restart enabled)
             logger.info("Step 2: auto_restart=%s", auto_restart)
@@ -243,6 +278,7 @@ class WorkflowMixin:
                 logger.info("Step 2 completed: Steam started")
                 if progress_callback:
                     progress_callback(f"{self._get_progress_timestamp()} Steam started successfully")
+                    progress_callback("[Jackify] Steam restart complete")
             else:
                 logger.info("Step 2 skipped: Auto-restart disabled by user")
                 if progress_callback:
@@ -287,6 +323,15 @@ class WorkflowMixin:
                     self._inject_game_registry_entries(str(prefix_path), special_game_type)
                 else:
                     logger.warning("Could not find prefix path for registry injection")
+            elif special_game_type == "cp2077":
+                logger.info("Step 5: Applying CP2077 DLL overrides to prefix registry")
+                if progress_callback:
+                    progress_callback(f"{self._get_progress_timestamp()} Configuring CP2077 mod framework DLL overrides...")
+
+                if prefix_path:
+                    self._apply_cp2077_dll_overrides(str(prefix_path))
+                else:
+                    logger.warning("Could not find prefix path for CP2077 DLL override injection")
             else:
                 logger.info("Step 5: Skipping registry injection for standard modlist")
 
@@ -296,18 +341,18 @@ class WorkflowMixin:
                 progress_callback(f"{self._get_progress_timestamp()} Creating game user directories...")
 
             if prefix_path:
-                self._create_game_user_directories(str(prefix_path), special_game_type)
+                self._create_game_user_directories(str(prefix_path), special_game_type, modlist_install_dir)
             else:
                 logger.warning("Could not find prefix path for directory creation")
-            
+
+
+
             last_timestamp = self._get_progress_timestamp()
             logger.info(f" Working workflow completed successfully! AppID: {appid}, Prefix: {prefix_path}")
             if progress_callback:
                 progress_callback(f"{last_timestamp} Steam integration complete")
                 progress_callback("")  # Blank line after Steam integration complete
 
-            # Show Proton override notification if applicable
-            self._show_proton_override_notification(progress_callback)
 
             if progress_callback:
                 progress_callback("")  # Extra blank line to span across Configuration Summary

@@ -36,7 +36,6 @@ def _get_clean_winetricks_base_env() -> dict:
     env["PATH"] = path or "/usr/bin:/bin"
     return env
 
-
 class WinetricksEnvMixin:
     """Mixin providing env build and dependency check for WinetricksHandler.install_wine_components."""
 
@@ -54,10 +53,11 @@ class WinetricksEnvMixin:
         env['WINEDEBUG'] = '-all'
         env['WINEPREFIX'] = wineprefix
         env['WINETRICKS_GUI'] = 'none'
-        if 'DISPLAY' in env:
-            env['WINEDLLOVERRIDES'] = 'winemenubuilder.exe=d'
-        else:
-            env['DISPLAY'] = env.get('DISPLAY', '')
+        env['WINEDLLOVERRIDES'] = 'winemenubuilder.exe=d'
+        # Preserve the desktop display variables for Step 4. The validated fix
+        # for the blank taskbar popup regression was keeping DISPLAY available.
+        # Do not strip extra desktop activation vars here without a reproduced,
+        # evidence-backed need.
 
         try:
             from ..handlers.config_handler import ConfigHandler
@@ -243,7 +243,10 @@ class WinetricksEnvMixin:
             if not found:
                 missing_deps.append(dep_name)
                 if dep_name in bundled_tools_list:
-                    self.logger.warning(f"  {dep_name}: NOT FOUND (neither bundled nor system)")
+                    if dep_name == 'aria2c':
+                        self.logger.debug(f"  {dep_name}: NOT FOUND (optional - curl/wget used if available)")
+                    else:
+                        self.logger.warning(f"  {dep_name}: NOT FOUND (neither bundled nor system)")
                 else:
                     self.logger.warning(f"  {dep_name}: NOT FOUND (system only - not bundled)")
 

@@ -6,6 +6,7 @@ Unified service for Nexus authentication using OAuth or API key fallback
 """
 
 import logging
+import os
 from typing import Optional, Tuple
 from .nexus_oauth_service import NexusOAuthService
 from ..handlers.oauth_token_handler import OAuthTokenHandler
@@ -287,6 +288,41 @@ class NexusAuthService:
 
         logger.warning("No authentication available for engine")
         return (None, None)
+
+    def get_token_writeback_path(self) -> 'Path':
+        """Return a PID-unique path where the engine should write back refreshed tokens."""
+        from pathlib import Path
+        from jackify.shared.paths import get_jackify_data_dir
+        return get_jackify_data_dir() / f"oauth_writeback_{os.getpid()}.json"
+
+    def apply_token_writeback(self, writeback_path) -> bool:
+        """
+        Read engine-written token writeback file and update local token store.
+        Called after engine process exits. No-op if file does not exist (engine not yet
+        supporting writeback, or API key auth was used).
+        """
+        import json
+        from pathlib import Path
+        path = Path(writeback_path)
+        if not path.exists():
+            return False
+        try:
+            data = json.loads(path.read_text())
+            oauth = data.get('oauth', {})
+            if oauth.get('access_token') and oauth.get('refresh_token'):
+                self.token_handler.save_token({'oauth': oauth})
+                logger.info("Applied OAuth token writeback from engine - refresh token rotation preserved")
+                return True
+            logger.debug("Token writeback file present but contains no usable OAuth data")
+            return False
+        except Exception as e:
+            logger.warning("Failed to apply token writeback: %s", e)
+            return False
+        finally:
+            try:
+                path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     def clear_all_auth(self) -> bool:
         """

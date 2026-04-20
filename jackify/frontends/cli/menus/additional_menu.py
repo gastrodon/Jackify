@@ -39,8 +39,10 @@ class AdditionalMenuHandler:
             print(f"   {COLOR_ACTION}→ Downloads and configures the Wabbajack app itself (via Proton){COLOR_RESET}")
             print(f"{COLOR_SELECTION}4.{COLOR_RESET} Setup Mod Organizer 2")
             print(f"   {COLOR_ACTION}→ Download and configure a standalone MO2 instance{COLOR_RESET}")
+            print(f"{COLOR_SELECTION}5.{COLOR_RESET} Configure Tool Compatibility")
+            print(f"   {COLOR_ACTION}→ Apply Wine registry settings for xEdit, Synthesis, Pandora, Nemesis{COLOR_RESET}")
             print(f"{COLOR_SELECTION}0.{COLOR_RESET} Return to Main Menu")
-            selection = input(f"\n{COLOR_PROMPT}Enter your selection (0-4): {COLOR_RESET}").strip()
+            selection = input(f"\n{COLOR_PROMPT}Enter your selection (0-5): {COLOR_RESET}").strip()
 
             if selection.lower() == 'q':  # Allow 'q' to re-display menu
                 continue
@@ -52,6 +54,8 @@ class AdditionalMenuHandler:
                 self._execute_install_wabbajack(cli_instance)
             elif selection == "4":
                 self._execute_setup_mo2(cli_instance)
+            elif selection == "5":
+                self._execute_configure_tool_compat(cli_instance)
             elif selection == "0":
                 break
             else:
@@ -150,7 +154,7 @@ class AdditionalMenuHandler:
         else:
             output_path = Path(output_path).expanduser()
 
-        # Check if output directory already has content — mirror GUI behaviour
+        # Check if output directory already has content - mirror GUI behaviour
         if output_path.exists() and output_path.is_dir():
             try:
                 has_files = any(output_path.iterdir())
@@ -405,3 +409,68 @@ class AdditionalMenuHandler:
         if self.logger:
             self.logger.debug("AdditionalMenuHandler: Executing Setup MO2 command")
         command.run()
+
+    def _execute_configure_tool_compat(self, cli_instance):
+        """Apply tool compatibility settings to an existing configured modlist prefix."""
+        from jackify.backend.handlers.modlist_handler import ModlistHandler
+        from jackify.backend.services.tool_config_service import apply_tool_config_for_appid
+        from jackify.shared.colors import COLOR_ERROR, COLOR_SUCCESS
+
+        self._clear_screen()
+        print_jackify_banner()
+        print_section_header("Configure Tool Compatibility")
+        print(f"{COLOR_INFO}Discovering configured modlists...{COLOR_RESET}")
+
+        try:
+            handler = ModlistHandler()
+            discovered = handler.discover_executable_shortcuts("ModOrganizer.exe")
+            shortcuts = [
+                {"name": m.get("name", "Unknown"), "appid": str(m.get("appid", ""))}
+                for m in discovered
+                if m.get("appid")
+            ]
+        except Exception as e:
+            print(f"{COLOR_ERROR}Failed to discover modlists: {e}{COLOR_RESET}")
+            input("Press Enter to return to menu...")
+            return
+
+        if not shortcuts:
+            print(f"{COLOR_WARNING}No configured modlists found.{COLOR_RESET}")
+            print(f"{COLOR_INFO}Install and configure a modlist first.{COLOR_RESET}")
+            input("Press Enter to return to menu...")
+            return
+
+        print()
+        for i, s in enumerate(shortcuts, 1):
+            print(f"{COLOR_SELECTION}{i}.{COLOR_RESET} {s['name']}")
+        print(f"{COLOR_SELECTION}0.{COLOR_RESET} Cancel")
+
+        selection = input(f"\n{COLOR_PROMPT}Select modlist (0-{len(shortcuts)}): {COLOR_RESET}").strip()
+
+        if selection == "0" or not selection:
+            return
+
+        try:
+            idx = int(selection) - 1
+            if idx < 0 or idx >= len(shortcuts):
+                raise ValueError()
+        except ValueError:
+            print(f"{COLOR_ERROR}Invalid selection.{COLOR_RESET}")
+            input("Press Enter to return to menu...")
+            return
+
+        chosen = shortcuts[idx]
+        print(f"\n{COLOR_INFO}Applying tool compatibility settings for: {chosen['name']}{COLOR_RESET}")
+        print(f"{COLOR_INFO}This may take a few minutes...{COLOR_RESET}\n")
+
+        def _log(msg: str):
+            print(f"{COLOR_INFO}{msg}{COLOR_RESET}")
+
+        ok = apply_tool_config_for_appid(chosen["appid"], log=_log)
+
+        if ok:
+            print(f"\n{COLOR_SUCCESS}Tool compatibility configured successfully.{COLOR_RESET}")
+        else:
+            print(f"\n{COLOR_ERROR}Tool compatibility configuration failed. Check logs for details.{COLOR_RESET}")
+
+        input("\nPress Enter to return to menu...")

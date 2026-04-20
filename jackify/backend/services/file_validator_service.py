@@ -221,7 +221,7 @@ class FileValidatorService:
 
     def _validate(self, file_path: Path, expected_hash: str) -> ValidationResult:
         try:
-            # No expected hash — accept by filename match alone, just move the file.
+            # No expected hash - accept by filename match alone, just move the file.
             if not (expected_hash or "").strip():
                 return ValidationResult(matches=True, computed_hash=None, file_path=file_path)
             h = xxhash.xxh64() if xxhash else _XXH64Fallback()

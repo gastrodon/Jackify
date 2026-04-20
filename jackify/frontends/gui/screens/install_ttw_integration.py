@@ -84,7 +84,7 @@ class TTWIntegrationMixin:
                     ttw_output_dir.rename(versioned_path)
                     ttw_output_dir = versioned_path
                 skip_copy = True
-                logger.debug("TTW already in mods dir — skipping copy step")
+                logger.debug("TTW already in mods dir - skipping copy step")
 
             # Create background thread for integration
             class IntegrationThread(QThread):

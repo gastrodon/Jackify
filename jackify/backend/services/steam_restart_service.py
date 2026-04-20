@@ -20,8 +20,6 @@ def _get_restart_strategy() -> str:
         from jackify.backend.handlers.config_handler import ConfigHandler
 
         strategy = ConfigHandler().get("steam_restart_strategy", STRATEGY_JACKIFY)
-        if strategy == "nak_simple":
-            strategy = STRATEGY_SIMPLE
         if strategy not in (STRATEGY_JACKIFY, STRATEGY_SIMPLE):
             return STRATEGY_JACKIFY
         return strategy
@@ -203,7 +201,7 @@ def is_flatpak_steam() -> bool:
 def ensure_flatpak_steam_filesystem_access(path: "Path") -> bool:
     """Grant Flatpak Steam filesystem access to the parent of the given path.
 
-    Safe to call on non-Flatpak systems — returns True immediately.
+    Safe to call on non-Flatpak systems - returns True immediately.
     Skips if the path is already covered by an existing override.
     Returns True if access was already present or successfully granted, False on error.
     """
@@ -212,7 +210,7 @@ def ensure_flatpak_steam_filesystem_access(path: "Path") -> bool:
         return True
     flatpak_cmd = _get_flatpak_command()
     if not flatpak_cmd:
-        logger.warning("Flatpak Steam detected but flatpak command not found — cannot grant filesystem access")
+        logger.warning("Flatpak Steam detected but flatpak command not found - cannot grant filesystem access")
         return False
     grant_path = str(_Path(path).parent)
     env = _get_clean_subprocess_env()

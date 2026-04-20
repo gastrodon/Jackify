@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QWidget, 
     QSpacerItem, QSizePolicy, QFrame, QApplication
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QFont
 
 logger = logging.getLogger(__name__)
@@ -145,7 +145,8 @@ class ENBProtonDialog(QDialog):
         # OK button
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self.ok_btn = QPushButton("I Understand")
+        self.ok_btn = QPushButton("I Understand (3s)")
+        self.ok_btn.setEnabled(False)
         self.ok_btn.setStyleSheet(
             "QPushButton { "
             "  background: #3fb7d6; "
@@ -162,9 +163,19 @@ class ENBProtonDialog(QDialog):
             "QPushButton:pressed { "
             "  background: #2d8fa8; "
             "}"
+            "QPushButton:disabled { "
+            "  background: #555; "
+            "  color: #aaa; "
+            "}"
         )
         self.ok_btn.clicked.connect(self.accept)
         btn_row.addWidget(self.ok_btn)
+
+        self._protect_countdown = 3
+        self._protect_timer = QTimer(self)
+        self._protect_timer.setInterval(1000)
+        self._protect_timer.timeout.connect(self._on_protect_tick)
+        self._protect_timer.start()
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
@@ -173,6 +184,15 @@ class ENBProtonDialog(QDialog):
         
         logger.info(f"ENBProtonDialog created for modlist: {modlist_name}")
     
+    def _on_protect_tick(self):
+        self._protect_countdown -= 1
+        if self._protect_countdown > 0:
+            self.ok_btn.setText(f"I Understand ({self._protect_countdown}s)")
+        else:
+            self._protect_timer.stop()
+            self.ok_btn.setText("I Understand")
+            self.ok_btn.setEnabled(True)
+
     def _set_dialog_icon(self):
         """Set the dialog icon to Wabbajack icon if available"""
         try:

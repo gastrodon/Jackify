@@ -534,7 +534,8 @@ class PathHandlerMO2Mixin:
     def set_download_directory(self, modlist_ini_path: Path, download_dir_linux_path, modlist_sdcard: bool) -> bool:
         """
         Set download_directory in ModOrganizer.ini to the correct Wine path (Z: or D: for SD card).
-        Use only when download dir is known (e.g. Install a Modlist flow). Configure New/Existing leave as-is.
+        Replaces ALL occurrences of the key throughout the file - MO2 reads the last one, and
+        duplicate [General] sections from Wabbajack installs are common.
         """
         if not modlist_ini_path.is_file() or not download_dir_linux_path:
             return False
@@ -553,35 +554,62 @@ class PathHandlerMO2Mixin:
             formatted = PathHandlerMO2Mixin._format_workingdir_for_mo2(wine_path)
             with open(modlist_ini_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-            in_general = False
-            download_line_idx = -1
-            for i, line in enumerate(lines):
-                if re.match(r'^\s*\[General\]\s*$', line, re.IGNORECASE):
-                    in_general = True
-                    continue
-                if in_general and re.match(r'^\s*\[', line):
-                    break
-                if in_general and re.match(r'^\s*download_directory\s*=', line, re.IGNORECASE):
-                    download_line_idx = i
-                    break
             new_line = f"download_directory = {formatted}\n"
-            if download_line_idx >= 0:
-                lines[download_line_idx] = new_line
+            replaced = [i for i, l in enumerate(lines) if re.match(r'^\s*download_directory\s*=', l, re.IGNORECASE)]
+            if replaced:
+                for i in replaced:
+                    lines[i] = new_line
             else:
-                if in_general:
-                    insert_idx = next((i for i, l in enumerate(lines) if re.match(r'^\s*\[General\]', l, re.I)), -1)
-                    if insert_idx >= 0:
+                # No existing entry - insert after [General]
+                insert_idx = next((i for i, l in enumerate(lines) if re.match(r'^\s*\[General\]', l, re.I)), -1)
+                if insert_idx >= 0:
+                    insert_idx += 1
+                    while insert_idx < len(lines) and not re.match(r'^\s*\[', lines[insert_idx]):
                         insert_idx += 1
-                        while insert_idx < len(lines) and not re.match(r'^\s*\[', lines[insert_idx]):
-                            insert_idx += 1
-                        lines.insert(insert_idx, new_line)
+                    lines.insert(insert_idx, new_line)
                 else:
                     lines.append("[General]\n")
                     lines.append(new_line)
             with open(modlist_ini_path, 'w', encoding='utf-8') as f:
                 f.writelines(lines)
-            logger.info(f"Set download_directory in ModOrganizer.ini to {formatted}")
+            logger.info(f"Set download_directory in ModOrganizer.ini to {formatted} ({len(replaced)} occurrence(s))")
             return True
         except Exception as e:
             logger.error(f"Error setting download_directory in {modlist_ini_path}: {e}")
             return False
+
+    def get_download_directory_linux_path(self, modlist_ini_path: Path) -> Optional[str]:
+        """
+        Read the first valid download_directory value from ModOrganizer.ini and convert to a Linux path.
+        Returns None if no valid Z: or D: path is found.
+        """
+        if not modlist_ini_path.is_file():
+            return None
+        try:
+            with open(modlist_ini_path, 'r', encoding='utf-8-sig') as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            try:
+                with open(modlist_ini_path, 'r', encoding='latin-1') as f:
+                    lines = f.readlines()
+            except Exception:
+                return None
+        except Exception:
+            return None
+        for line in lines:
+            m = re.match(r'^\s*download_directory\s*=\s*(.+)$', line, re.IGNORECASE)
+            if not m:
+                continue
+            raw = m.group(1).strip()
+            # Expect Z:\\path\\... or D:\\path\\... (MO2 doubles backslashes in the file)
+            drive_m = re.match(r'^([ZzDd]):(.+)$', raw)
+            if not drive_m:
+                continue
+            drive, rest = drive_m.group(1).upper(), drive_m.group(2)
+            # Collapse doubled backslashes back to single separators
+            rest = re.sub(r'\\\\', '/', rest).replace('\\', '/')
+            if drive == 'Z':
+                return '/' + rest.lstrip('/')
+            # D: (SD card) - return as-is with leading slash; caller handles sdcard prefix
+            return '/' + rest.lstrip('/')
+        return None

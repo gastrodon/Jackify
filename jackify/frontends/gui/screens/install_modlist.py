@@ -49,8 +49,9 @@ from .install_modlist_workflow import InstallWorkflowMixin
 from .install_modlist_nexus import NexusAuthMixin
 from .install_modlist_selection import ModlistSelectionMixin
 from .screen_back_mixin import ScreenBackMixin
+from jackify.frontends.gui.mixins.thread_lifecycle_mixin import ThreadLifecycleMixin
 
-class InstallModlistScreen(ScreenBackMixin, InstallModlistUISetupMixin, ConsoleOutputMixin, ProgressHandlersMixin, PostInstallFeedbackMixin, AutomatedPrefixHandlersMixin, ConfigurationPhaseMixin, QWidget, TTWIntegrationMixin, VNVAutomationMixin, InstallWorkflowMixin, NexusAuthMixin, ModlistSelectionMixin):
+class InstallModlistScreen(ThreadLifecycleMixin, ScreenBackMixin, InstallModlistUISetupMixin, ConsoleOutputMixin, ProgressHandlersMixin, PostInstallFeedbackMixin, AutomatedPrefixHandlersMixin, ConfigurationPhaseMixin, QWidget, TTWIntegrationMixin, VNVAutomationMixin, InstallWorkflowMixin, NexusAuthMixin, ModlistSelectionMixin):
     resize_request = Signal(str)  # Signal for expand/collapse like TTW screen
     def _collect_actionable_controls(self):
         """Collect all actionable controls that should be disabled during operations (except Cancel)"""
@@ -411,16 +412,25 @@ class InstallModlistScreen(ScreenBackMixin, InstallModlistUISetupMixin, ConsoleO
         btn_exit.clicked.connect(on_exit)
         dlg.exec()
 
+    def hideEvent(self, event):
+        if getattr(self, '_vnv_controller', None) is not None:
+            try:
+                self._vnv_controller.cleanup()
+            except Exception:
+                pass
+        super().hideEvent(event)
+
     def cleanup_processes(self):
         """Clean up any running processes when the window closes or is cancelled"""
-        logger.debug("DEBUG: cleanup_processes called - cleaning up InstallationThread and other processes")
-
         if getattr(self, '_vnv_controller', None) is not None:
             self._vnv_controller.cleanup()
             self._vnv_controller = None
 
         self._stop_focus_reclaim()
 
+        # Disconnect all thread signals before any stopping - prevents callbacks to
+        # a dying widget if threads emit between now and actual termination.
+        self._park_all_threads()
 
         def _stop_thread(attr_name: str, cancel_method: Optional[str] = None, cooperative_ms: int = 5000, force_ms: int = 10000):
             thread = getattr(self, attr_name, None)
@@ -460,14 +470,10 @@ class InstallModlistScreen(ScreenBackMixin, InstallModlistUISetupMixin, ConsoleO
             except Exception:
                 pass
 
-            logger.warning(f"WARNING: {attr_name} did not stop in {cooperative_ms}ms, forcing terminate")
+            logger.warning(f"WARNING: {attr_name} did not stop in {cooperative_ms}ms, waiting for forced shutdown window")
             try:
                 if cancel_method and hasattr(thread, cancel_method):
                     getattr(thread, cancel_method)()
-            except Exception:
-                pass
-            try:
-                thread.terminate()
             except Exception:
                 pass
             try:
@@ -545,21 +551,18 @@ class InstallModlistScreen(ScreenBackMixin, InstallModlistUISetupMixin, ConsoleO
                         self.install_thread.cancel()
                         self.install_thread.wait(5000)
 
-                # Cancel the automated prefix thread if it exists
-                if hasattr(self, 'prefix_thread') and self.prefix_thread and self.prefix_thread.isRunning():
-                    self.prefix_thread.terminate()
-                    self.prefix_thread.wait(3000)  # Wait up to 3 seconds for graceful shutdown
-                    if self.prefix_thread.isRunning():
-                        self.prefix_thread.terminate()  # Force terminate if needed
-                        self.prefix_thread.wait(1000)
-
-                # Cancel the configuration thread if it exists
-                if hasattr(self, 'config_thread') and self.config_thread and self.config_thread.isRunning():
-                    self.config_thread.terminate()
-                    self.config_thread.wait(3000)  # Wait up to 3 seconds for graceful shutdown
-                    if self.config_thread.isRunning():
-                        self.config_thread.terminate()  # Force terminate if needed
-                        self.config_thread.wait(1000)
+                # Park prefix/config threads - disconnect their signals and let them
+                # finish naturally rather than terminating unsafely.
+                if hasattr(self, 'prefix_thread') and self.prefix_thread:
+                    self.prefix_thread = self._park_thread(
+                        self.prefix_thread,
+                        ["progress_update", "workflow_complete", "error_occurred"],
+                    )
+                if hasattr(self, 'config_thread') and self.config_thread:
+                    self.config_thread = self._park_thread(
+                        self.config_thread,
+                        ["progress_update", "configuration_complete", "error_occurred"],
+                    )
 
                 # Cleanup any remaining processes
                 self.cleanup_processes()

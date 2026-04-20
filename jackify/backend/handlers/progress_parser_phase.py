@@ -20,11 +20,11 @@ class ProgressParserPhaseMixin:
             phase = self._map_section_to_phase(section_name)
             return (phase, section_match.group(1).strip())
 
-        # [FILE_PROGRESS] lines drive file activity only — skip phase extraction for them
+        # [FILE_PROGRESS] lines drive file activity only - skip phase extraction for them
         if '[FILE_PROGRESS]' in line:
             return None
 
-        # Make the [timestamp] prefix optional — engine no longer emits it.
+        # Make the [timestamp] prefix optional - engine no longer emits it.
         action_match = re.search(
             r'(?:\[.*?\]\s*)?(Installing|Downloading|Extracting|Validating|Processing|Checking existing)',
             line,

@@ -401,7 +401,7 @@ class _ErrorDialog(QDialog):
             self._detail_edit.hide()
             layout.addWidget(self._detail_edit)
 
-        # OK button — disabled for 3s to prevent accidental dismissal
+        # OK button - disabled for 3s to prevent accidental dismissal
         buttons = QDialogButtonBox(QDialogButtonBox.Ok)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)

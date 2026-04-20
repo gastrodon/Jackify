@@ -35,13 +35,12 @@ Jackify is a Linux application for installing and configuring Wabbajack modlists
 ## Requirements
 
 - Linux system (most modern distributions will work)
-- Steam installed and configured
+- Steam installed and configured — **the Snap version of Steam is not supported**
 - **Protontricks** — required for modlist configuration
   - See [Installing Additional Tools](https://github.com/Omni-guides/Jackify/wiki/Installing-Additional-Tools#installing-protontricks)
 - **GE-Proton 10-14** — While other Proton versions may work, GE-Proton 10-14 is highly recommended for ENB compatibility
   - See [Installing Additional Tools](https://github.com/Omni-guides/Jackify/wiki/Installing-Additional-Tools#installing-ge-proton)
-- **Nexus Mods account** (Premium required for automated downloads)
-  - Non-Premium accounts are supported, but some downloads may require manual browser steps
+- **Nexus Mods account** (Premium required for fully automated downloads; Non-Premium supported with manual browser steps)
   - See the [User Guide](https://github.com/Omni-guides/Jackify/wiki/User-Guide) for full details on the options available
 - **FUSE2 compatibility (libfuse.so.2) is required for AppImage execution**
 - **IF YOU ARE USING an Ubuntu/Debian-based distro** (Ubuntu, Kubuntu, Linux Mint, Pop!_OS, Zorin OS, elementary OS, and others): Qt platform plugin library

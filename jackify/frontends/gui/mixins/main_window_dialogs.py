@@ -3,8 +3,11 @@ Main window dialogs and cleanup mixin.
 Settings, About, open URL, cleanup_processes, closeEvent.
 """
 
+import logging
 import os
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 from jackify.frontends.gui.dialogs.settings_dialog import SettingsDialog
 
@@ -20,6 +23,17 @@ class MainWindowDialogsMixin:
                 return None
         except RuntimeError:
             return None
+
+        # Disconnect all signals before stopping to prevent callbacks to a dying widget.
+        try:
+            thread.finished.disconnect()
+        except Exception:
+            pass
+        for _sig in ("update_available", "no_update", "check_failed", "cache_ready", "progress_update"):
+            try:
+                getattr(thread, _sig).disconnect()
+            except Exception:
+                pass
 
         try:
             thread.requestInterruption()
@@ -38,13 +52,8 @@ class MainWindowDialogsMixin:
             pass
 
         try:
-            thread.terminate()
-        except Exception:
-            pass
-
-        try:
             if not thread.wait(10000):
-                print(f"WARNING: {thread_name} still running during shutdown")
+                logger.warning("%s still running during shutdown", thread_name)
         except Exception:
             pass
         return None

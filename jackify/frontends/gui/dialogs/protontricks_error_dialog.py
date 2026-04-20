@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPixmap, QIcon, QFont
 from .. import shared_theme
+from jackify.frontends.gui.mixins.thread_lifecycle_mixin import ThreadLifecycleMixin
 
 
 class FlatpakInstallThread(QThread):
@@ -26,7 +27,7 @@ class FlatpakInstallThread(QThread):
         self.finished.emit(success, message)
 
 
-class ProtontricksErrorDialog(QDialog):
+class ProtontricksErrorDialog(ThreadLifecycleMixin, QDialog):
     """
     Dialog shown when protontricks is not found
     Provides options to install via Flatpak or get native installation guidance
@@ -322,7 +323,7 @@ class ProtontricksErrorDialog(QDialog):
 
     def closeEvent(self, event):
         """Handle dialog close event"""
-        if self.install_thread and self.install_thread.isRunning():
-            self.install_thread.terminate()
-            self.install_thread.wait()
+        self.install_thread = self._park_thread(
+            self.install_thread, ["install_complete", "install_failed", "progress_update"]
+        )
         event.accept()

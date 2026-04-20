@@ -4,7 +4,7 @@ import re
 import time
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import QFileDialog
+from jackify.frontends.gui.utils import browse_file
 
 from jackify.shared.progress_models import FileProgress, OperationType
 from .screen_focus_reclaim import FocusReclaimMixin, STEAM_RESTART_SENTINEL
@@ -168,7 +168,7 @@ class ConfigureNewModlistConsoleMixin(FocusReclaimMixin):
             del self._component_install_list
 
     def browse_install_dir(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Select ModOrganizer.exe", os.path.expanduser("~"), "ModOrganizer.exe (ModOrganizer.exe)")
+        file = browse_file(self, "Select ModOrganizer.exe", os.path.expanduser("~"), "ModOrganizer.exe (ModOrganizer.exe)")
         if file:
-            self.install_dir_edit.setText(os.path.realpath(file))
+            self.install_dir_edit.setText(file)
 

@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 STATUS = Literal["pending", "browser_opened", "validating", "complete", "deferred", "skipped", "error"]
 
-_STATE_FILE = Path.home() / '.local' / 'share' / 'jackify' / 'manual_download_state.json'
+def _get_state_file() -> Path:
+    from jackify.shared.paths import get_jackify_data_dir
+    return get_jackify_data_dir() / 'manual_download_state.json'
 
 
 @dataclass

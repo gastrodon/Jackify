@@ -35,7 +35,7 @@ class InstallerThread(QThread):
 
     def __init__(self, modlist, install_dir, downloads_dir, api_key, modlist_name,
                  install_mode='online', progress_state_manager=None, auth_service=None,
-                 oauth_info=None, skip_disk_check=False):
+                 oauth_info=None):
         super().__init__()
         self.modlist = modlist
         self.install_dir = install_dir
@@ -48,7 +48,6 @@ class InstallerThread(QThread):
         self.progress_state_manager = progress_state_manager
         self.auth_service = auth_service
         self.oauth_info = oauth_info
-        self.skip_disk_check = skip_disk_check
         self._premium_signal_sent = False
         self._non_premium_info_sent = False
         self._engine_output_buffer = []
@@ -277,17 +276,17 @@ class InstallerThread(QThread):
             if debug_mode:
                 cmd.append('--debug')
                 logger.debug("DEBUG: Added --debug flag to jackify-engine command")
-            if self.skip_disk_check:
-                cmd.append('--skip-disk-check')
-                logger.debug("DEBUG: Added --skip-disk-check flag to jackify-engine command")
             logger.debug(f"DEBUG: FULL Engine command: {' '.join(cmd)}")
             logger.debug(f"DEBUG: modlist value being passed: '{self.modlist}'")
             from jackify.backend.handlers.subprocess_utils import get_clean_subprocess_env
+            writeback_path = str(self.auth_service.get_token_writeback_path()) if self.auth_service else None
             env_vars = {'NEXUS_API_KEY': self.api_key}
             if self.oauth_info:
                 env_vars['NEXUS_OAUTH_INFO'] = self.oauth_info
                 from jackify.backend.services.nexus_oauth_service import NexusOAuthService
                 env_vars['NEXUS_OAUTH_CLIENT_ID'] = NexusOAuthService.CLIENT_ID
+            if writeback_path:
+                env_vars['JACKIFY_TOKEN_WRITEBACK'] = writeback_path
             env = get_clean_subprocess_env(env_vars)
 
             # Install-time resource preflight: keep this visible in workflow output so
@@ -472,6 +471,8 @@ class InstallerThread(QThread):
                     self.output_received.emit(decoded)
             stderr_thread.join(timeout=5)
             returncode = self.process_manager.wait()
+            if writeback_path and self.auth_service:
+                self.auth_service.apply_token_writeback(writeback_path)
             if self.process_manager.proc and self.process_manager.proc.stdout:
                 try:
                     remaining = self.process_manager.proc.stdout.read()

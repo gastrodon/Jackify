@@ -24,15 +24,16 @@ class UnsupportedGameDialog(QDialog):
     # Signal emitted when user clicks OK to continue
     continue_installation = Signal()
     
-    def __init__(self, parent=None, game_name: str = None):
+    def __init__(self, parent=None, game_name: str = None, vr_warning: bool = False):
         super().__init__(parent)
         self.game_name = game_name
+        self.vr_warning = vr_warning
         self.setup_ui()
         self.setup_connections()
-    
+
     def setup_ui(self):
         """Set up the dialog UI."""
-        self.setWindowTitle("Game Support Notice")
+        self.setWindowTitle("VR Platform Notice" if self.vr_warning else "Game Support Notice")
         self.setModal(True)
         self.setFixedSize(500, 500)
         
@@ -49,7 +50,7 @@ class UnsupportedGameDialog(QDialog):
         icon_label.setFixedSize(32, 32)
         icon_label.setStyleSheet("color: #e67e22;")
         title_layout.addWidget(icon_label)
-        title_label = QLabel("<b>Game Support Notice</b>")
+        title_label = QLabel("<b>VR Platform Notice</b>" if self.vr_warning else "<b>Game Support Notice</b>")
         title_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
         title_label.setStyleSheet("color: #3fd0ea;")
         title_layout.addWidget(title_label)
@@ -82,7 +83,24 @@ class UnsupportedGameDialog(QDialog):
         """)
         
         # Create the message content
-        if self.game_name:
+        if self.vr_warning:
+            game_label = self.game_name or "a VR modlist"
+            message = f"""<p><strong>You are about to install {game_label}.</strong></p>
+
+<p>Jackify will handle the download, Wine prefix setup, and Steam shortcut creation as normal. However, getting VR modlists running on Linux involves platform dependencies that are outside Jackify's control:</p>
+
+<ul>
+<li>SteamVR must be installed and working with your headset before launching</li>
+<li>Your VR runtime (SteamVR, ALVR, WiVRn, etc.) must be configured separately</li>
+<li>Some modlists may require additional manual steps documented by the list author</li>
+</ul>
+
+<p>Jackify's VR support is <strong>best effort</strong>. The install and configuration will proceed normally, but whether the modlist runs correctly depends heavily on your VR platform setup.</p>
+
+<p><strong>Always consult your modlist's installation guide</strong> for any additional manual steps required after Jackify completes.</p>
+
+<p>Click <strong>Continue</strong> to proceed, or <strong>Cancel</strong> to go back.</p>"""
+        elif self.game_name:
             message = f"""<p><strong>You are about to install a modlist for <em>{self.game_name}</em>.</strong></p>
 
 <p>While any modlist can be downloaded with Jackify, the post-install configuration can only be automatically applied to:</p>
@@ -187,17 +205,18 @@ class UnsupportedGameDialog(QDialog):
         self.accepted.connect(self.continue_installation.emit)
     
     @staticmethod
-    def show_dialog(parent=None, game_name: str = None) -> bool:
+    def show_dialog(parent=None, game_name: str = None, vr_warning: bool = False) -> bool:
         """
-        Show the unsupported game dialog and return the user's choice.
-        
+        Show the dialog and return the user's choice.
+
         Args:
             parent: Parent widget
-            game_name: Name of the unsupported game (optional)
-            
+            game_name: Name of the game (optional)
+            vr_warning: Show VR best-effort warning instead of unsupported game notice
+
         Returns:
             True if user clicked Continue, False if Cancel
         """
-        dialog = UnsupportedGameDialog(parent, game_name)
+        dialog = UnsupportedGameDialog(parent, game_name, vr_warning=vr_warning)
         result = dialog.exec()
         return result == QDialog.DialogCode.Accepted 

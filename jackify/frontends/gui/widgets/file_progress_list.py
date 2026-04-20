@@ -25,7 +25,7 @@ __all__ = ['SummaryProgressWidget', 'FileProgressItem', 'FileProgressList']
 
 
 class _CpuWorker(QThread):
-    """Background worker for CPU usage sampling — keeps psutil off the main thread."""
+    """Background worker for CPU usage sampling - keeps psutil off the main thread."""
     result = Signal(str)
     caches_updated = Signal(object, object, float)  # process_cache, child_cache, smoothed_pct
 
@@ -53,7 +53,7 @@ class _CpuWorker(QThread):
                     try:
                         current_child_pids.add(child.pid)
                         if child.pid not in self._child_cache:
-                            # Baseline in background — no longer blocks main thread
+                            # Baseline in background - no longer blocks main thread
                             child.cpu_percent(interval=0.1)
                             self._child_cache[child.pid] = child
                             continue
@@ -173,7 +173,7 @@ class FileProgressList(QWidget):
 
         self._last_update_time = 0.0
 
-        # CPU usage tracking — worker thread to avoid blocking the main thread
+        # CPU usage tracking - worker thread to avoid blocking the main thread
         self._cpu_timer = QTimer(self)
         self._cpu_timer.timeout.connect(self._start_cpu_worker)
         self._cpu_timer.setInterval(2000)
@@ -342,9 +342,7 @@ class FileProgressList(QWidget):
         self._cpu_timer.stop()
         if self._cpu_worker and self._cpu_worker.isRunning():
             self._cpu_worker.quit()
-            if not self._cpu_worker.wait(500):
-                self._cpu_worker.terminate()
-                self._cpu_worker.wait(1000)
+            self._cpu_worker.wait(1000)
             self._cpu_worker = None
 
     def _start_cpu_worker(self):

@@ -96,6 +96,7 @@ class AdditionalTasksScreen(QWidget):
             ("Install TTW", "ttw_install", "Install Tale of Two Wastelands using TTW_Linux_Installer"),
             ("Install Wabbajack", "wabbajack_install", "Install Wabbajack.exe via Proton (automated setup)"),
             ("Setup Mod Organizer 2", "setup_mo2", "Download and configure a standalone MO2 instance"),
+            ("Configure Tool Compatibility", "tool_config", "Apply xEdit, Pandora and DLL fixes to an existing modlist prefix"),
             ("Return to Main Menu", "return_main_menu", "Go back to the main menu"),
         ]
         
@@ -153,6 +154,8 @@ class AdditionalTasksScreen(QWidget):
             self._show_wabbajack_installer()
         elif action_id == "setup_mo2":
             self._show_mo2_setup()
+        elif action_id == "tool_config":
+            self._show_tool_config()
         elif action_id == "coming_soon":
             self._show_coming_soon_info()
         elif action_id == "return_main_menu":
@@ -184,6 +187,10 @@ class AdditionalTasksScreen(QWidget):
             "Additional tools and features will be added in future updates.\n\n"
             "Check back later for more functionality!"
         )
+
+    def _show_tool_config(self):
+        if self.stacked_widget:
+            self.stacked_widget.setCurrentIndex(11)
 
     def _return_to_main_menu(self):
         """Return to main menu"""

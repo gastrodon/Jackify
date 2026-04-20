@@ -38,7 +38,7 @@ def handle_protocol_url(url: str):
 
     if error:
         error_description = params.get('error_description', ['No description'])[0]
-        _log_error(f"OAuth error: {error} — {error_description}")
+        _log_error(f"OAuth error: {error} - {error_description}")
         return
 
     if not code or not state:

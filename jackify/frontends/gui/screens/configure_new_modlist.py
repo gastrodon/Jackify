@@ -36,10 +36,11 @@ from .configure_new_modlist_dialogs import ConfigureNewModlistDialogsMixin, Modl
 from .screen_back_mixin import ScreenBackMixin
 from .install_modlist_ttw import TTWIntegrationMixin
 from .install_modlist_postinstall import PostInstallFeedbackMixin
+from jackify.frontends.gui.mixins.thread_lifecycle_mixin import ThreadLifecycleMixin
 
 logger = logging.getLogger(__name__)
 
-class ConfigureNewModlistScreen(ScreenBackMixin, TTWIntegrationMixin, ConfigureNewModlistUISetupMixin, ConfigureNewModlistConsoleMixin, ConfigureNewModlistWorkflowMixin, ConfigureNewModlistDialogsMixin, PostInstallFeedbackMixin, QWidget):
+class ConfigureNewModlistScreen(ThreadLifecycleMixin, ScreenBackMixin, TTWIntegrationMixin, ConfigureNewModlistUISetupMixin, ConfigureNewModlistConsoleMixin, ConfigureNewModlistWorkflowMixin, ConfigureNewModlistDialogsMixin, PostInstallFeedbackMixin, QWidget):
     resize_request = Signal(str)
 
     def cancel_and_cleanup(self):
@@ -165,32 +166,7 @@ class ConfigureNewModlistScreen(ScreenBackMixin, TTWIntegrationMixin, ConfigureN
 
     def cleanup(self):
         """Clean up any running threads when the screen is closed"""
-        logger.debug("DEBUG: cleanup called - cleaning up threads")
-
         if getattr(self, '_vnv_controller', None) is not None:
             self._vnv_controller.cleanup()
             self._vnv_controller = None
-        
-        # Clean up automated prefix thread if running
-        if hasattr(self, 'automated_prefix_thread') and self.automated_prefix_thread and self.automated_prefix_thread.isRunning():
-            logger.debug("DEBUG: Terminating AutomatedPrefixThread")
-            try:
-                self.automated_prefix_thread.progress_update.disconnect()
-                self.automated_prefix_thread.workflow_complete.disconnect()
-                self.automated_prefix_thread.error_occurred.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            self.automated_prefix_thread.terminate()
-            self.automated_prefix_thread.wait(2000)  # Wait up to 2 seconds
-        
-        # Clean up config thread if running
-        if hasattr(self, 'config_thread') and self.config_thread and self.config_thread.isRunning():
-            logger.debug("DEBUG: Terminating ConfigThread")
-            try:
-                self.config_thread.progress_update.disconnect()
-                self.config_thread.configuration_complete.disconnect()
-                self.config_thread.error_occurred.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            self.config_thread.terminate()
-            self.config_thread.wait(2000)  # Wait up to 2 seconds 
+        self._park_all_threads()

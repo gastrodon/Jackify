@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPixmap, QFont
 
 from ....backend.services.update_service import UpdateService, UpdateInfo
+from jackify.frontends.gui.mixins.thread_lifecycle_mixin import ThreadLifecycleMixin
 
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class UpdateDownloadThread(QThread):
             self.download_finished.emit(None)
 
 
-class UpdateDialog(QDialog):
+class UpdateDialog(ThreadLifecycleMixin, QDialog):
     """Dialog for notifying users about updates and handling downloads."""
     
     def __init__(self, update_info: UpdateInfo, update_service: UpdateService, parent=None):
@@ -335,9 +336,7 @@ class UpdateDialog(QDialog):
     
     def closeEvent(self, event):
         """Handle dialog close event."""
-        if self.download_thread and self.download_thread.isRunning():
-            # Cancel download if in progress
-            self.download_thread.terminate()
-            self.download_thread.wait()
-        
+        self.download_thread = self._park_thread(
+            self.download_thread, ["progress_updated", "download_finished"]
+        )
         event.accept()

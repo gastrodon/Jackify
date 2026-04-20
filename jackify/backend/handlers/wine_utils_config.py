@@ -6,7 +6,6 @@ Extracted from wine_utils for file-size and domain separation.
 """
 
 import os
-import re
 import subprocess
 import logging
 from typing import Optional
@@ -54,39 +53,6 @@ class WineUtilsConfigMixin:
             return True
         except Exception as e:
             logger.error(f"Error performing additional tasks: {e}")
-            return False
-
-    @staticmethod
-    def modlist_specific_steps(modlist: str, appid: str) -> bool:
-        """Perform modlist-specific configuration steps. Returns True on success."""
-        try:
-            modlist_configs = {
-                "wildlander": ["dotnet48", "dotnet472", "vcrun2019"],
-                "septimus|sigernacollection|licentia|aldrnari|phoenix": ["dotnet48", "dotnet472"],
-                "masterstroke": ["dotnet48", "dotnet472"],
-                "diablo": ["dotnet48", "dotnet472"],
-                "living_skyrim": ["dotnet48", "dotnet472", "dotnet462"],
-                "nolvus": ["dotnet8"]
-            }
-            modlist_lower = modlist.lower().replace(" ", "")
-            if "wildlander" in modlist_lower:
-                logger.info(f"Running steps specific to {modlist}. This can take some time, be patient!")
-                return True
-            for pattern, components in modlist_configs.items():
-                if re.search(pattern.replace("|", "|.*"), modlist_lower):
-                    logger.info(f"Running steps specific to {modlist}. This can take some time, be patient!")
-                    for component in components:
-                        if component == "dotnet8":
-                            logger.info("Downloading .NET 8 Runtime")
-                            pass
-                        else:
-                            logger.info(f"Installing {component}...")
-                            pass
-                    return True
-            logger.debug(f"No specific steps needed for {modlist}")
-            return True
-        except Exception as e:
-            logger.error(f"Error performing modlist-specific steps: {e}")
             return False
 
     @staticmethod

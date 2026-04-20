@@ -14,9 +14,9 @@ class ModlistContext:
     """Context object for modlist operations."""
     name: str
     install_dir: Path
-    download_dir: Path
     game_type: str
     nexus_api_key: str
+    download_dir: Optional[Path] = None
     modlist_value: Optional[str] = None
     modlist_source: Optional[str] = None  # 'identifier' or 'file'
     resolution: Optional[str] = None
@@ -29,8 +29,8 @@ class ModlistContext:
         """Convert string paths to Path objects."""
         if isinstance(self.install_dir, str):
             self.install_dir = Path(self.install_dir)
-        if isinstance(self.download_dir, str):
-            self.download_dir = Path(self.download_dir)
+        if self.download_dir is not None and isinstance(self.download_dir, str):
+            self.download_dir = Path(self.download_dir) if self.download_dir else None
         if isinstance(self.mo2_exe_path, str):
             self.mo2_exe_path = Path(self.mo2_exe_path)
     

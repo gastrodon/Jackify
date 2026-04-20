@@ -136,7 +136,7 @@ class WineUtilsProtonMixin:
             if fallback_path != 'auto':
                 fallback_wine_bin = Path(fallback_path) / "files/bin/wine"
                 if fallback_wine_bin.is_file():
-                    logger.warning(f"Requested Proton version '{proton_version}' not found. Falling back to user's configured version.")
+                    logger.info(f"Requested Proton version '{proton_version}' not found. Falling back to user's configured version.")
                     return str(fallback_wine_bin)
         except Exception:
             pass

@@ -258,7 +258,7 @@ class NexusAuthMixin:
             wait_label = QLabel(
                 "Waiting for authorisation...\n\n"
                 "Please complete authorisation in your browser.\n\n"
-                "Your browser may ask permission to open Jackify — click Open or Allow."
+                "Your browser may ask permission to open Jackify - click Open or Allow."
             )
             wait_label.setWordWrap(True)
             wait_label.setStyleSheet("color: #ccc; font-size: 12px;")
@@ -366,8 +366,6 @@ class NexusAuthMixin:
                 oauth_thread.wait(100)
                 if oauth_cancelled[0]:
                     oauth_thread.wait(2000)
-                    if oauth_thread.isRunning():
-                        oauth_thread.terminate()
                     break
 
             wait_dialog.close()

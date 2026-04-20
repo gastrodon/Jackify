@@ -1,6 +1,7 @@
 """Modlist selection methods for InstallModlistScreen (Mixin)."""
 from pathlib import Path
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QApplication, QDialog
+from PySide6.QtWidgets import QMessageBox, QApplication, QDialog
+from jackify.frontends.gui.utils import browse_directory, browse_file
 from PySide6.QtCore import QTimer, Qt
 import logging
 import os
@@ -38,6 +39,9 @@ class ModlistSelectionMixin:
             "Starfield": "starfield",
             "Oblivion Remastered": "oblivion_remastered",
             "Enderal": "enderal",
+            "Skyrim VR": "skyrimvr",
+            "Fallout 4 VR": "fallout4vr",
+            "Baldur's Gate 3": "bg3",
             "Other": "other"
         }
         cli_game_type = game_type_map.get(game_type, "other")
@@ -139,6 +143,9 @@ class ModlistSelectionMixin:
                 "Starfield": "Starfield",
                 "Oblivion Remastered": "Oblivion",
                 "Enderal": "Enderal Special Edition",
+                "Skyrim VR": "Skyrim VR",
+                "Fallout 4 VR": "Fallout 4 VR",
+                "Baldur's Gate 3": "Baldur's Gate 3",
                 "Other": None
             }
 
@@ -161,7 +168,8 @@ class ModlistSelectionMixin:
                     'game': metadata.gameHumanFriendly,
                     'description': metadata.description,
                     'nsfw': metadata.nsfw,
-                    'force_down': metadata.forceDown
+                    'force_down': metadata.forceDown,
+                    'readme_url': metadata.links.readme if metadata.links else None,
                 }
                 self.modlist_name_edit.setText(metadata.title)
 
@@ -179,17 +187,17 @@ class ModlistSelectionMixin:
             self.modlist_btn.setEnabled(True)
 
     def browse_wabbajack_file(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Select .wabbajack File", os.path.expanduser("~"), "Wabbajack Files (*.wabbajack)")
+        file = browse_file(self, "Select .wabbajack File", os.path.expanduser("~"), "Wabbajack Files (*.wabbajack)")
         if file:
-            self.file_edit.setText(os.path.realpath(file))
+            self.file_edit.setText(file)
 
     def browse_install_dir(self):
-        dir = QFileDialog.getExistingDirectory(self, "Select Install Directory", self.install_dir_edit.text())
+        dir = browse_directory(self, "Select Install Directory", self.install_dir_edit.text())
         if dir:
-            self.install_dir_edit.setText(os.path.realpath(dir))
+            self.install_dir_edit.setText(dir)
 
     def browse_downloads_dir(self):
-        dir = QFileDialog.getExistingDirectory(self, "Select Downloads Directory", self.downloads_dir_edit.text())
+        dir = browse_directory(self, "Select Downloads Directory", self.downloads_dir_edit.text())
         if dir:
-            self.downloads_dir_edit.setText(os.path.realpath(dir))
+            self.downloads_dir_edit.setText(dir)
 

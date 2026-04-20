@@ -22,6 +22,7 @@ from PySide6.QtGui import QFont, QClipboard
 from ....backend.services.update_service import UpdateService
 from ....backend.models.configuration import SystemInfo
 from .... import __version__
+from jackify.frontends.gui.mixins.thread_lifecycle_mixin import ThreadLifecycleMixin
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class UpdateCheckThread(QThread):
             self.update_check_finished.emit(None)
 
 
-class AboutDialog(QDialog):
+class AboutDialog(ThreadLifecycleMixin, QDialog):
     """About dialog showing system info and app details."""
     
     def __init__(self, system_info: SystemInfo, parent=None):
@@ -420,8 +421,7 @@ Python: {platform.python_version()}"""
     
     def closeEvent(self, event):
         """Handle dialog close event."""
-        if self.update_check_thread and self.update_check_thread.isRunning():
-            self.update_check_thread.terminate()
-            self.update_check_thread.wait()
-        
+        self.update_check_thread = self._park_thread(
+            self.update_check_thread, ["update_available", "no_update", "check_failed"]
+        )
         event.accept()

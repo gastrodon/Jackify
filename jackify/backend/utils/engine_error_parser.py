@@ -53,7 +53,7 @@ _TYPE_MAP = {
         suggestion="Check your internet connection and retry.",
         solutions=[
             "Verify your internet connection.",
-            "Re-run the install — Wabbajack resumes from where it stopped.",
+            "Re-run the install - Wabbajack resumes from where it stopped.",
             "Check if Nexus Mods is reachable at nexusmods.com.",
             "Disable VPN or proxy if active.",
         ],
@@ -84,7 +84,7 @@ _TYPE_MAP = {
     "archive_corrupt": lambda msg, ctx: InstallError(
         "Corrupted Archive",
         msg,
-        suggestion="Re-run the install — Wabbajack will re-download and re-verify the file.",
+        suggestion="Re-run the install - Wabbajack will re-download and re-verify the file.",
         solutions=[
             "Re-run the install.",
             "Check available disk space (partial downloads appear corrupt).",
@@ -99,7 +99,7 @@ _TYPE_MAP = {
         solutions=[
             "Verify the modlist name is correct.",
             "Ensure the target game is installed.",
-            "Re-run — the modlist index may have been temporarily unavailable.",
+            "Re-run - the modlist index may have been temporarily unavailable.",
         ],
         technical=_ctx_detail(ctx),
     ),
@@ -108,7 +108,7 @@ _TYPE_MAP = {
         msg,
         suggestion="Re-run the install to re-download any failed files.",
         solutions=[
-            "Re-run the install — Wabbajack resumes and re-validates.",
+            "Re-run the install - Wabbajack resumes and re-validates.",
             "Check available disk space.",
             "Check Modlist_Install_workflow.log for specific failures.",
         ],

@@ -149,7 +149,7 @@ class FileProgressItem(QWidget):
     def _set_indeterminate(self):
         if not self._is_indeterminate:
             self._is_indeterminate = True
-            # Qt's QProgressStyleAnimation drives this automatically — no manual timer needed
+            # Qt's QProgressStyleAnimation drives this automatically - no manual timer needed
             self.progress_bar.setRange(0, 0)
         self.percent_label.setText("")
 

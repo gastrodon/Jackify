@@ -300,7 +300,6 @@ class ShortcutVDFManagementMixin:
                 try:
                     shutil.copy2(safe_backup, shortcuts_file)
                     self.logger.info(f"Restored shortcuts.vdf from pre-restart backup")
-                    print("Restored shortcuts file after Steam restart")
                     return
                 except Exception as e:
                     self.logger.error(f"Failed to restore from pre-restart backup: {e}")
@@ -310,9 +309,8 @@ class ShortcutVDFManagementMixin:
                 try:
                     shutil.copy2(backup, shortcuts_file)
                     self.logger.info(f"Restored shortcuts.vdf from regular backup")
-                    print("Restored shortcuts file after Steam restart")
                 except Exception as e:
                     self.logger.error(f"Failed to restore from backup: {e}")
-                    print("Failed to restore shortcuts file. You may need to recreate your shortcut.")
+                    self.logger.warning("shortcuts.vdf restore failed - shortcut may need to be recreated")
         else:
             self.logger.info(f"shortcuts.vdf verified intact after restart")

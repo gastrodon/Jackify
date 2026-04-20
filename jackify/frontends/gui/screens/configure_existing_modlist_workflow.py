@@ -15,34 +15,12 @@ class ConfigureExistingModlistWorkflowMixin:
     """Mixin providing workflow management for ConfigureExistingModlistScreen."""
 
     def _detect_game_type_from_mo2_ini(self, install_dir: str) -> str:
-        """Detect game type by checking ModOrganizer.ini for loader executables."""
-        from pathlib import Path
-        
-        mo2_ini = Path(install_dir) / "ModOrganizer.ini"
-        if not mo2_ini.exists():
-            return 'skyrim'  # Fallback to most common
-        
+        """Detect special game type using the canonical ModlistHandler detection."""
         try:
-            content = mo2_ini.read_text(encoding='utf-8', errors='ignore').lower()
-            
-            if 'skse64_loader.exe' in content or 'skyrim special edition' in content:
-                return 'skyrim'
-            elif 'f4se_loader.exe' in content or 'fallout 4' in content:
-                return 'fallout4'
-            elif 'nvse_loader.exe' in content or 'fallout new vegas' in content:
-                return 'falloutnv'
-            elif 'fose_loader.exe' in content or 'fallout 3' in content:
-                return 'fallout3'
-            elif 'obse_loader.exe' in content or 'oblivion' in content:
-                return 'oblivion'
-            elif 'starfield' in content:
-                return 'starfield'
-            elif 'enderal' in content:
-                return 'enderal'
-            else:
-                return 'skyrim'
+            from jackify.backend.handlers.modlist_handler import ModlistHandler
+            return ModlistHandler().detect_special_game_type(install_dir) or 'skyrim'
         except Exception as e:
-            logger.warning(f"Error detecting game type from ModOrganizer.ini: {e}")
+            logger.warning("Game type detection failed, defaulting to skyrim: %s", e)
             return 'skyrim'
 
     def validate_and_start_configure(self):
@@ -78,6 +56,7 @@ class ConfigureExistingModlistWorkflowMixin:
             MessageService.critical(self, "Invalid Shortcut", "The selected shortcut is missing required information.", safety_level="medium")
             self._enable_controls_after_operation()
             return
+        self._current_appid = shortcut.get('AppID', shortcut.get('appid', ''))
         resolution = self.resolution_combo.currentText()
         # Handle resolution saving
         if resolution and resolution != "Leave unchanged":
@@ -152,7 +131,7 @@ class ConfigureExistingModlistWorkflowMixin:
                         modlist_context = ModlistContext(
                             name=self.modlist_name,
                             install_dir=Path(self.install_dir),
-                            download_dir=Path(self.install_dir).parent / 'Downloads',  # Default
+                            download_dir=None,
                             game_type=detected_game_type,
                             nexus_api_key='',  # Not needed for configuration-only
                             modlist_value='',  # Not needed for existing modlist
@@ -187,7 +166,7 @@ class ConfigureExistingModlistWorkflowMixin:
                             manual_steps_callback=manual_steps_callback,
                             completion_callback=completion_callback
                         )
-                        
+
                         if not success:
                             self.error_occurred.emit(
                                 "Configuration did not complete successfully. "

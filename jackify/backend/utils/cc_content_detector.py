@@ -6,7 +6,7 @@ import re
 from typing import Optional
 
 # Matches CC content file names: ccXXXsse001-name.bsa/esm/esl/esp, ccXXXfo4001-name.ba2, etc.
-# No leading \b — filenames often appear with a Data_ prefix (Data_ccbgssse019-...)
+# No leading \b - filenames often appear with a Data_ prefix (Data_ccbgssse019-...)
 # where _ is a word char and would prevent \b from matching.
 _CC_FILE_RE = re.compile(
     r'cc[a-z]{2,8}\d{3,4}[-\w]*\.(?:bsa|esm|esl|esp|ba2)',
