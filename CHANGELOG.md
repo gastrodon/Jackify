@@ -1,5 +1,12 @@
 # Jackify Changelog
 
+## v0.6.0.1 - Hotfix
+**Release Date:** 24/04/26
+
+- Resolved some issues with the integration of jackify-engine 0.5.4.
+
+---
+
 ## v0.6 - Game Support Expansion, Modding Tool Support, Post-Install Quality
 **Release Date:** 20/04/26
 
